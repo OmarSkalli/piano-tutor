@@ -13,6 +13,7 @@ Known technical debt and areas for improvement.
 ## Process
 
 When completing an execution plan:
+
 1. Identify any shortcuts or compromises made
 2. Document them here with context
 3. Link to the completed exec plan

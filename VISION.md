@@ -9,11 +9,13 @@ Make learning and practicing piano interactive and intuitive — from understand
 ## Goals
 
 ### Short-term (3-6 months)
+
 - Import songs via MIDI and visualize them on a piano keyboard
 - Build Study Mode: navigate a song note-by-note, understand the sheet, hear playback
 - Build Practice Mode: connect a MIDI keyboard and get real-time feedback while playing
 
 ### Long-term (1-2 years)
+
 - Support a growing library of songs with smooth import UX
 - Expand Practice Mode with tempo control, looping sections, and progress tracking
 - Become a go-to personal tool for learning new piano pieces
@@ -41,5 +43,6 @@ This is a personal learning tool. Avoid feature bloat — each addition should d
 - App feels fast and responsive on a desktop browser
 
 ---
+
 Owner: Omar Skalli
 Last updated: 2026-03-26

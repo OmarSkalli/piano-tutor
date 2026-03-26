@@ -9,10 +9,12 @@ Piano Tutor has two modes: **Study** (visualize a song on a keyboard, step throu
 ## Documentation Map
 
 ### Product & Features
+
 - [VISION.md](VISION.md) - Strategic direction and core principles
 - [docs/product-specs/index](docs/product-specs/index.md) - Product requirements and specifications
 
 ### Planning & Execution
+
 - [docs/exec-plans/active/](docs/exec-plans/active/) - Current work in progress
 - [docs/exec-plans/completed/](docs/exec-plans/completed/) - Historical execution plans
 - [docs/exec-plans/tech-debt](docs/exec-plans/tech-debt.md) - Known technical debt
@@ -37,4 +39,5 @@ This repository follows the harness engineering pattern:
 Navigate using the Documentation Map above to find what you need.
 
 ---
+
 Last updated: 2026-03-26

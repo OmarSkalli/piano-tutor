@@ -1,5 +1,6 @@
 import midiLib from '@tonejs/midi'
 const { Midi } = midiLib as unknown as typeof import('@tonejs/midi')
+import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 
@@ -15,7 +16,11 @@ if (!fs.existsSync(inputPath)) {
   process.exit(1)
 }
 
-const midi = new Midi(fs.readFileSync(inputPath))
+const fileBuffer = fs.readFileSync(inputPath)
+const midi = new Midi(fileBuffer)
+
+// MD5 checksum of the source file — stable song ID
+const id = crypto.createHash('md5').update(fileBuffer).digest('hex')
 
 // Derive slug from filename
 const slug = path
@@ -25,9 +30,9 @@ const slug = path
   .replace(/^-|-$/g, '')
 
 const outputDir = path.join('src', 'songs', slug)
-fs.mkdirSync(outputDir, { recursive: true })
+const isRerun = fs.existsSync(path.join(outputDir, 'metadata.json'))
 
-// Copy source file
+fs.mkdirSync(outputDir, { recursive: true })
 fs.copyFileSync(inputPath, path.join(outputDir, 'source.mid'))
 
 // Build tempo map for tick→ms conversion
@@ -67,7 +72,7 @@ type Hand = 'right' | 'left' | 'unknown'
 
 function assignHands(trackCount: number): Hand[] {
   if (trackCount === 2) return ['right', 'left']
-  if (trackCount === 1) return ['unknown'] // pitch-split handled per note
+  if (trackCount === 1) return ['unknown']
   return Array.from({ length: trackCount }, (_, i) =>
     i === 0 ? 'right' : i === 1 ? 'left' : 'unknown',
   )
@@ -98,7 +103,6 @@ const tracks: Track[] = midi.tracks.map((track, i) => {
     durationMs:
       ticksToMs(note.ticks + note.durationTicks) - ticksToMs(note.ticks),
   }))
-  // For pitch-split single-track files, hand is assigned per-note at render time
   const hand: Hand = usePitchSplit ? 'unknown' : (hands[i] ?? 'unknown')
   return { hand, notes }
 })
@@ -108,6 +112,7 @@ const lastNote = tracks
   .reduce((max, n) => Math.max(max, n.startMs + n.durationMs), 0)
 
 const songJson = {
+  id,
   ticksPerQuarter,
   durationMs: lastNote,
   tempoChanges: tempoMap.map(({ tick, bpm }) => ({ tick, bpm })),
@@ -120,60 +125,78 @@ const songJson = {
   tracks,
 }
 
-// Metadata
-const rawTitle = midi.header.name?.replace(/\0/g, '').trim() || null
-const title = rawTitle && rawTitle.length > 0 ? rawTitle : null
-
-const keyEvent = midi.header.keySignatures[0]
-let keySignature: string | null = null
-if (keyEvent) {
-  const { key, scale } = keyEvent
-  keySignature = `${key} ${scale}`
-}
-
-const timeSig = midi.header.timeSignatures[0]
-const timeSignature = timeSig
-  ? `${timeSig.timeSignature[0]}/${timeSig.timeSignature[1]}`
-  : null
-
-const tempo = tempoMap[0]?.bpm ?? null
-
-const handsMap = midi.tracks.length >= 2 ? { right: 0, left: 1 } : null
-
-const metadataJson = {
-  title,
-  composer: null,
-  keySignature,
-  timeSignature,
-  tempo,
-  hands: handsMap,
-  source: path.basename(inputPath),
-}
-
 fs.writeFileSync(
   path.join(outputDir, 'song.json'),
   JSON.stringify(songJson, null, 2),
 )
-fs.writeFileSync(
-  path.join(outputDir, 'metadata.json'),
-  JSON.stringify(metadataJson, null, 2),
+
+// Only write metadata.json on first import — preserve manual edits on re-run
+if (!isRerun) {
+  const rawTitle = midi.header.name?.replace(/\0/g, '').trim() || null
+  const title = rawTitle && rawTitle.length > 0 ? rawTitle : null
+
+  const keyEvent = midi.header.keySignatures[0]
+  const keySignature = keyEvent ? `${keyEvent.key} ${keyEvent.scale}` : null
+
+  const timeSig = midi.header.timeSignatures[0]
+  const timeSignature = timeSig
+    ? `${timeSig.timeSignature[0]}/${timeSig.timeSignature[1]}`
+    : null
+
+  const metadataJson = {
+    id,
+    title,
+    composer: null as string | null,
+    keySignature,
+    timeSignature,
+    tempo: tempoMap[0]?.bpm ?? null,
+    hands: midi.tracks.length >= 2 ? { right: 0, left: 1 } : null,
+    source: path.basename(inputPath),
+  }
+
+  fs.writeFileSync(
+    path.join(outputDir, 'metadata.json'),
+    JSON.stringify(metadataJson, null, 2),
+  )
+}
+
+// Update library.json
+const libraryPath = path.join('src', 'songs', 'library.json')
+interface LibraryEntry {
+  id: string
+  slug: string
+  title: string | null
+}
+const library: LibraryEntry[] = fs.existsSync(libraryPath)
+  ? JSON.parse(fs.readFileSync(libraryPath, 'utf8'))
+  : []
+
+const existingIndex = library.findIndex((e) => e.slug === slug)
+const metadata = JSON.parse(
+  fs.readFileSync(path.join(outputDir, 'metadata.json'), 'utf8'),
 )
+const entry: LibraryEntry = { id, slug, title: metadata.title }
+
+if (existingIndex >= 0) {
+  library[existingIndex] = entry
+} else {
+  library.push(entry)
+}
+
+fs.writeFileSync(libraryPath, JSON.stringify(library, null, 2))
 
 // Summary
 const totalNotes = tracks.reduce((sum, t) => sum + t.notes.length, 0)
 const durationSec = (lastNote / 1000).toFixed(1)
 
-console.log(`\nSong: ${slug}`)
+console.log(`\nSong: ${slug} (${id})`)
 console.log(`Tracks: ${midi.tracks.length}`)
 console.log(`Total notes: ${totalNotes}`)
 console.log(`Duration: ${durationSec}s`)
-console.log(`Metadata:`)
-console.log(`  title: ${title ?? 'null (not in MIDI)'}`)
-console.log(`  composer: null`)
-console.log(`  key: ${keySignature ?? 'null (not in MIDI)'}`)
-console.log(`  time signature: ${timeSignature ?? 'null (not in MIDI)'}`)
-console.log(`  tempo: ${tempo} BPM`)
-console.log(
-  `  hands: ${handsMap ? JSON.stringify(handsMap) : 'null (single track — pitch split used)'}`,
-)
+if (isRerun) {
+  console.log(`metadata.json: preserved (re-run)`)
+} else {
+  console.log(`metadata.json: written`)
+}
 console.log(`\nWritten to ${outputDir}/`)
+console.log(`Library updated: ${libraryPath}`)

@@ -165,10 +165,11 @@ Run one command with a MIDI file path, and the song is immediately available in 
 ## Related Documents
 
 - Vision: [../VISION.md](../../VISION.md)
+- Execution Plan: [../exec-plans/completed/song-import-pipeline](../exec-plans/completed/song-import-pipeline.md)
 
 ---
 
-**Status**: 📋 Planned
+**Status**: ✅ Shipped
 **Owner**: Omar Skalli
 **Created**: 2026-03-26
 **Updated**: 2026-03-26

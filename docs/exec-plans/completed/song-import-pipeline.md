@@ -9,20 +9,60 @@ Related spec: [../product-specs/song-import-pipeline](../product-specs/song-impo
 ## Progress
 
 - [x] (2026-03-26 00:00Z) Milestone 1: Install dependencies and scaffold the script
-- [ ] Milestone 2: Implement MIDI parsing and JSON output
-- [ ] Milestone 3: Validate against the sample MIDI file
+- [x] (2026-03-26 00:30Z) Milestone 2: Implement MIDI parsing and JSON output
+- [x] (2026-03-26 00:35Z) Milestone 3: Validate against the sample MIDI file
 
 ## Surprises & Discoveries
 
-_Empty — filled during execution._
+- **`@tonejs/midi` ESM export**: Named import `{ Midi }` fails in ESM context — the package exports a CJS default wrapping `{ Midi, Track, Header }`. Fixed with `import midiLib from '@tonejs/midi'` + cast.
+- **Null byte in MIDI title**: The sample file's track name contained a trailing `\u0000`. Stripped with `.replace(/\0/g, '')` before storing.
+- **Non-zero song start**: The first note in the sample begins at ~10.7s, not 0ms. This is valid MIDI — there's a leading empty region. Study/Practice Mode will need to account for this (offset or trim).
+- **Accented chars in slug**: `é` → `t` after `.toLowerCase()` since `toLowerCase()` doesn't strip diacritics. Slug becomes `comptine-d-un-autre-t-easy-version` instead of `comptine-dun-autre-ete`. Acceptable for now; a proper slugify library would fix this if needed.
+- **Generated JSON and Prettier**: `src/songs/` JSON output fails `prettier --check`. Added `src/songs/` to `.prettierignore` since these are generated files.
 
 ## Decision Log
 
-_Empty — filled during execution._
+- **Decision**: Remove `hand` field from individual notes; it belongs on the track only
+  **Rationale**: Hand is a track-level property, not per-note. Duplicating it per-note adds noise and diverges from the schema.
+  **Date/Author**: 2026-03-26 / Claude
+
+- **Decision**: Add `src/songs/` to `.prettierignore`
+  **Rationale**: Generated files shouldn't be subject to formatting checks.
+  **Date/Author**: 2026-03-26 / Claude
 
 ## Outcomes & Retrospective
 
-_Filled at completion._
+### Achievements
+
+- `pnpm process-song <path>` parses any MIDI file and writes `song.json`, `metadata.json`, and `source.mid` to `src/songs/<slug>/`
+- Handles 2-track piano files with automatic right/left hand assignment; falls back to pitch split at middle C for single-track files
+- Extracts key signature, time signature, tempo, and title from MIDI meta messages; sets unavailable fields to `null`
+- Converts MIDI ticks to milliseconds using the full tempo map (handles mid-song tempo changes)
+- Validated against the sample file: 760 notes, 138s, G major, 4/4, 92 BPM, 2 tracks
+
+### Gaps & Limitations
+
+- Slug generation drops accented characters (`é` → `t`) since `toLowerCase()` doesn't strip diacritics
+- Songs with a leading empty region (non-zero `startMs` on first note) will need Study/Practice Mode to handle time offset
+- No `--overwrite` guard — re-running silently overwrites existing output including any manual `metadata.json` edits
+- Composer field is always `null`; no standard MIDI meta field for it
+
+### Lessons Learned
+
+**What worked well:**
+
+- `@tonejs/midi` covers all needed parsing (notes, tempo, key, time sig) in one package
+- Separating `metadata.json` from `song.json` makes hand-editing metadata straightforward
+
+**What to improve:**
+
+- `@tonejs/midi` CJS/ESM interop requires an awkward cast — worth watching if the package publishes proper ESM types
+
+### Follow-Up Items
+
+- Add a slugify library (e.g. `slugify`) to handle accented characters properly
+- Study/Practice Mode: handle non-zero song start time (trim or offset display)
+- Add `--overwrite` flag or existence check to protect manual metadata edits
 
 ---
 
@@ -299,8 +339,8 @@ interface MetadataJson {
 
 **Metadata**
 
-- **Status**: 🚧 Active
+- **Status**: ✅ Completed
 - **Owner**: Omar Skalli
 - **Created**: 2026-03-26
-- **Started**: —
-- **Completed**: —
+- **Started**: 2026-03-26
+- **Completed**: 2026-03-26

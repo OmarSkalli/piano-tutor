@@ -19,17 +19,10 @@ if (!fs.existsSync(inputPath)) {
 const fileBuffer = fs.readFileSync(inputPath)
 const midi = new Midi(fileBuffer)
 
-// MD5 checksum of the source file — stable song ID
+// MD5 checksum of the source file — stable song ID and folder name
 const id = crypto.createHash('md5').update(fileBuffer).digest('hex')
 
-// Derive slug from filename
-const slug = path
-  .basename(inputPath, path.extname(inputPath))
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, '-')
-  .replace(/^-|-$/g, '')
-
-const outputDir = path.join('src', 'songs', slug)
+const outputDir = path.join('src', 'songs', id)
 const isRerun = fs.existsSync(path.join(outputDir, 'metadata.json'))
 
 fs.mkdirSync(outputDir, { recursive: true })
@@ -164,18 +157,17 @@ if (!isRerun) {
 const libraryPath = path.join('src', 'songs', 'library.json')
 interface LibraryEntry {
   id: string
-  slug: string
   title: string | null
 }
 const library: LibraryEntry[] = fs.existsSync(libraryPath)
   ? JSON.parse(fs.readFileSync(libraryPath, 'utf8'))
   : []
 
-const existingIndex = library.findIndex((e) => e.slug === slug)
 const metadata = JSON.parse(
   fs.readFileSync(path.join(outputDir, 'metadata.json'), 'utf8'),
 )
-const entry: LibraryEntry = { id, slug, title: metadata.title }
+const entry: LibraryEntry = { id, title: metadata.title }
+const existingIndex = library.findIndex((e) => e.id === id)
 
 if (existingIndex >= 0) {
   library[existingIndex] = entry
@@ -189,14 +181,10 @@ fs.writeFileSync(libraryPath, JSON.stringify(library, null, 2))
 const totalNotes = tracks.reduce((sum, t) => sum + t.notes.length, 0)
 const durationSec = (lastNote / 1000).toFixed(1)
 
-console.log(`\nSong: ${slug} (${id})`)
+console.log(`\nID:     ${id}`)
 console.log(`Tracks: ${midi.tracks.length}`)
-console.log(`Total notes: ${totalNotes}`)
-console.log(`Duration: ${durationSec}s`)
-if (isRerun) {
-  console.log(`metadata.json: preserved (re-run)`)
-} else {
-  console.log(`metadata.json: written`)
-}
+console.log(`Notes:  ${totalNotes}`)
+console.log(`Length: ${durationSec}s`)
+console.log(`metadata.json: ${isRerun ? 'preserved (re-run)' : 'written'}`)
 console.log(`\nWritten to ${outputDir}/`)
 console.log(`Library updated: ${libraryPath}`)

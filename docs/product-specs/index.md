@@ -14,8 +14,9 @@ Catalogue of all product specifications.
 
 ## Planned Specs
 
-| Title | Status | Owner | Updated | Summary |
-| ----- | ------ | ----- | ------- | ------- |
+| Title                                           | Status     | Owner       | Updated    | Summary                                                                      |
+| ----------------------------------------------- | ---------- | ----------- | ---------- | ---------------------------------------------------------------------------- |
+| [Song Import Pipeline](song-import-pipeline.md) | 📋 Planned | Omar Skalli | 2026-03-26 | CLI script to parse a MIDI file and output structured JSON into `src/songs/` |
 
 ## Status Legend
 

@@ -4,76 +4,78 @@ import Soundfont from 'soundfont-player'
 const SOUNDFONT_URL = '/soundfonts/MusyngKite/acoustic_grand_piano-mp3.js'
 
 export interface AudioEngine {
-  /** Call on first user gesture. Returns a promise that resolves when piano samples are ready. */
+  /** Call on first user gesture to unlock the AudioContext. */
   prepare(): Promise<void>
   playNote(noteName: string, durationMs: number, velocity?: number): void
-  /** True while the soundfont file is being fetched into cache on mount. */
+  /** True while audio samples are being decoded on mount. */
   isPreloading: boolean
 }
 
 export function useAudioEngine(): AudioEngine {
   const ctxRef = useRef<AudioContext | null>(null)
   const playerRef = useRef<Soundfont.Player | null>(null)
-  const masterGainRef = useRef<GainNode | null>(null)
-  const preparePromiseRef = useRef<Promise<void> | null>(null)
+  const resumedRef = useRef(false)
+  const warmupPromiseRef = useRef<Promise<void> | null>(null)
   const [isPreloading, setIsPreloading] = useState(true)
 
-  // Fetch the soundfont into the browser HTTP cache on mount so prepare() is fast
+  // Create AudioContext and decode all samples on mount — no gesture needed for
+  // this part. Only ctx.resume() requires a gesture, which happens in prepare().
   useEffect(() => {
-    console.log('[audio] preload fetch start')
-    fetch(SOUNDFONT_URL)
-      .then((r) => console.log('[audio] preload fetch done', r.status))
-      .catch((e) => console.error('[audio] preload fetch error', e))
-      .finally(() => setIsPreloading(false))
-  }, [])
-
-  function prepare(): Promise<void> {
-    if (preparePromiseRef.current) {
-      console.log('[audio] prepare: already in progress / done')
-      return preparePromiseRef.current
-    }
-
-    console.log('[audio] prepare: creating AudioContext')
     const ctx = new AudioContext()
     ctxRef.current = ctx
-    console.log('[audio] AudioContext state:', ctx.state)
-    const gain = ctx.createGain()
-    gain.gain.value = 0.7
-    gain.connect(ctx.destination)
-    masterGainRef.current = gain
+    console.log('[audio] warmup: created AudioContext, state:', ctx.state)
 
-    // iOS creates AudioContext in 'suspended' state. We must call resume()
-    // synchronously within the gesture (done here), but we also need to await
-    // it before playing notes — so chain it into the prepare promise.
-    console.log('[audio] resuming AudioContext (state:', ctx.state, ')')
-    const resumePromise = ctx.resume().then(() => {
-      console.log('[audio] AudioContext resumed — state:', ctx.state)
-    })
-
-    console.log('[audio] loading soundfont instrument')
-    const promise = Promise.all([
-      resumePromise,
-      Soundfont.instrument(ctx, 'acoustic_grand_piano', {
+    warmupPromiseRef.current = Soundfont.instrument(
+      ctx,
+      'acoustic_grand_piano',
+      {
         format: 'mp3',
         soundfont: 'MusyngKite',
         nameToUrl: () => SOUNDFONT_URL,
-      }),
-    ])
-      .then(([, player]) => {
-        console.log('[audio] ready — ctx state:', ctx.state)
+      },
+    )
+      .then((player) => {
+        console.log('[audio] warmup done — ctx state:', ctx.state)
         playerRef.current = player
       })
       .catch((e) => {
-        console.error('[audio] prepare error', e)
-        // Reset so the user can retry
-        preparePromiseRef.current = null
-        ctxRef.current = null
-        playerRef.current = null
-        throw e
+        console.error('[audio] warmup error', e)
+        warmupPromiseRef.current = null
       })
+      .finally(() => setIsPreloading(false))
 
-    preparePromiseRef.current = promise
-    return promise
+    return () => {
+      playerRef.current?.stop()
+      ctx.close()
+      ctxRef.current = null
+      playerRef.current = null
+      warmupPromiseRef.current = null
+      resumedRef.current = false
+    }
+  }, [])
+
+  // Called on first user gesture — resumes the AudioContext (required by browsers)
+  // and waits for sample decoding to finish if still in progress.
+  async function prepare(): Promise<void> {
+    const ctx = ctxRef.current
+    if (!ctx) return
+
+    if (!resumedRef.current) {
+      console.log(
+        '[audio] prepare: resuming AudioContext (state:',
+        ctx.state,
+        ')',
+      )
+      await ctx.resume()
+      resumedRef.current = true
+      console.log('[audio] prepare: resumed — state:', ctx.state)
+    }
+
+    if (warmupPromiseRef.current) {
+      console.log('[audio] prepare: waiting for warmup to finish')
+      await warmupPromiseRef.current
+      console.log('[audio] prepare: warmup done')
+    }
   }
 
   function playNote(noteName: string, durationMs: number, velocity = 80) {
@@ -89,31 +91,11 @@ export function useAudioEngine(): AudioEngine {
     )
     if (!ctx || !player) return
 
-    // Sanity-check: play a brief oscillator beep to confirm AudioContext output works
-    // TODO: remove after debugging
-    const osc = ctx.createOscillator()
-    const g = ctx.createGain()
-    g.gain.value = 0.1
-    osc.connect(g)
-    g.connect(ctx.destination)
-    osc.start(ctx.currentTime)
-    osc.stop(ctx.currentTime + 0.1)
-
     player.play(noteName, ctx.currentTime, {
       gain: velocity / 127,
       duration: durationMs / 1000,
     })
   }
-
-  useEffect(() => {
-    return () => {
-      playerRef.current?.stop()
-      ctxRef.current?.close()
-      ctxRef.current = null
-      playerRef.current = null
-      preparePromiseRef.current = null
-    }
-  }, [])
 
   return { prepare, playNote, isPreloading }
 }

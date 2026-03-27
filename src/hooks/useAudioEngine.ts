@@ -42,30 +42,27 @@ export function useAudioEngine(): AudioEngine {
     gain.connect(ctx.destination)
     masterGainRef.current = gain
 
-    // iOS creates AudioContext in 'suspended' state. Call resume() synchronously
-    // here (within the user gesture) to unlock it — the promise resolving async
-    // is fine, but the *call* must happen in the gesture handler stack.
-    if (ctx.state === 'suspended') {
-      console.log('[audio] resuming suspended AudioContext')
-      ctx
-        .resume()
-        .then(() =>
-          console.log('[audio] AudioContext resumed, state:', ctx.state),
-        )
-    }
+    // iOS creates AudioContext in 'suspended' state. We must call resume()
+    // synchronously within the gesture (done here), but we also need to await
+    // it before playing notes — so chain it into the prepare promise.
+    console.log('[audio] resuming AudioContext (state:', ctx.state, ')')
+    const resumePromise = ctx.resume()
 
     console.log('[audio] loading soundfont instrument')
-    const promise = Soundfont.instrument(ctx, 'acoustic_grand_piano', {
-      format: 'mp3',
-      soundfont: 'MusyngKite',
-      nameToUrl: () => SOUNDFONT_URL,
-    })
-      .then((player) => {
-        console.log('[audio] soundfont loaded, ctx state:', ctx.state)
+    const promise = Promise.all([
+      resumePromise,
+      Soundfont.instrument(ctx, 'acoustic_grand_piano', {
+        format: 'mp3',
+        soundfont: 'MusyngKite',
+        nameToUrl: () => SOUNDFONT_URL,
+      }),
+    ])
+      .then(([, player]) => {
+        console.log('[audio] ready — ctx state:', ctx.state)
         playerRef.current = player
       })
       .catch((e) => {
-        console.error('[audio] soundfont load error', e)
+        console.error('[audio] prepare error', e)
         throw e
       })
 

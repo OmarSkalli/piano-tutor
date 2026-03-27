@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { Song } from '@/types'
 import {
   getActiveInfo,
@@ -47,9 +47,8 @@ export function SheetMusic({
   const highlightRectRef = useRef<SVGRectElement | null>(null)
   const lastScrolledRowRef = useRef(-1)
 
-  // Re-render sheet when song or label toggle changes
-  useEffect(() => {
-    if (!pageRef.current || !outerRef.current) return
+  const renderSheetCallback = useCallback(() => {
+    if (!pageRef.current) return
     lastScrolledRowRef.current = -1
 
     const { noteRefs, measureBoxes } = renderSheet(pageRef.current, song, {
@@ -90,7 +89,29 @@ export function SheetMusic({
       svg.insertBefore(rect, svg.firstChild)
       highlightRectRef.current = rect
     }
-  }, [song, showLabels])
+  }, [song, showLabels, keySignature])
+
+  // Re-render sheet when song or label toggle changes
+  useEffect(() => {
+    renderSheetCallback()
+  }, [renderSheetCallback])
+
+  // Re-render on container resize (orientation change, browser resize).
+  // Observe the outer scrollable div — its width changes on resize but not
+  // when the inner SVG height changes, avoiding a render feedback loop.
+  useEffect(() => {
+    const outer = outerRef.current
+    if (!outer) return
+    let lastWidth = outer.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (outer.clientWidth !== lastWidth) {
+        lastWidth = outer.clientWidth
+        renderSheetCallback()
+      }
+    })
+    observer.observe(outer)
+    return () => observer.disconnect()
+  }, [renderSheetCallback])
 
   // Measure click/tap → seek
   useEffect(() => {

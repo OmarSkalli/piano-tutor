@@ -47,6 +47,7 @@ function SongView() {
   const [showPiano, setShowPiano] = useState(true)
   const [selectedMeasure, setSelectedMeasure] = useState<number | null>(null)
   const [debugLogs, setDebugLogs] = useState<string[]>([])
+  const [showDebug, setShowDebug] = useState(false)
   const origConsole = useRef({ log: console.log, error: console.error })
 
   useEffect(() => {
@@ -120,6 +121,7 @@ function SongView() {
         positionMs={positionMs}
         showLabels={showLabels}
         showPiano={showPiano}
+        showDebug={showDebug}
         onPlay={play}
         onPause={pause}
         onPrepare={audioEngine.prepare}
@@ -127,6 +129,7 @@ function SongView() {
         onSetTempoRate={setTempoRate}
         onToggleLabels={() => setShowLabels((v) => !v)}
         onTogglePiano={() => setShowPiano((v) => !v)}
+        onToggleDebug={() => setShowDebug((v) => !v)}
         getPositionMs={getPositionMs}
       />
       <div className="flex-1 overflow-hidden">
@@ -139,18 +142,19 @@ function SongView() {
           selectedMeasure={isPlaying ? null : selectedMeasure}
         />
       </div>
-      {showPiano && (
+      {showDebug ? (
+        <div className="max-h-40 shrink-0 overflow-y-auto bg-black/90 px-2 py-1 font-mono text-xs text-green-400">
+          {debugLogs.length === 0 ? (
+            <div className="text-green-600">no logs yet</div>
+          ) : (
+            debugLogs.map((l, i) => <div key={i}>{l}</div>)
+          )}
+        </div>
+      ) : showPiano ? (
         <div className="shrink-0">
           <PianoKeyboard highlightedNotes={highlightedNotes} />
         </div>
-      )}
-      {debugLogs.length > 0 && (
-        <div className="max-h-32 shrink-0 overflow-y-auto bg-black/80 px-2 py-1 font-mono text-xs text-green-400">
-          {debugLogs.map((l, i) => (
-            <div key={i}>{l}</div>
-          ))}
-        </div>
-      )}
+      ) : null}
     </main>
   )
 }

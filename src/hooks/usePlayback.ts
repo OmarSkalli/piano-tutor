@@ -39,6 +39,7 @@ export function usePlayback(
   const tempoRateRef = useRef(1)
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const rafRef = useRef(0)
+  const scheduleVersionRef = useRef(0)
 
   const getPositionMs = useCallback((): number => {
     if (!isPlayingRef.current) return positionMsRef.current
@@ -52,8 +53,20 @@ export function usePlayback(
     cancelAnimationFrame(rafRef.current)
   }, [])
 
+  const resetPlayback = useCallback(() => {
+    scheduleVersionRef.current += 1
+    clearAll()
+    isPlayingRef.current = false
+    positionMsRef.current = 0
+    setIsPlaying(false)
+    setPositionMs(0)
+    setActiveNoteIds(new Set())
+    setActiveNoteNames(new Map())
+  }, [clearAll])
+
   const scheduleFrom = useCallback(
     async (fromMs: number, rate: number) => {
+      const scheduleVersion = ++scheduleVersionRef.current
       clearAll()
       setActiveNoteIds(new Set())
       setActiveNoteNames(new Map())
@@ -62,6 +75,7 @@ export function usePlayback(
       // scheduling notes — on mobile the network load can take longer than the
       // first setTimeout delay, causing playNote to silently no-op.
       await audioEngine.prepare()
+      if (scheduleVersionRef.current !== scheduleVersion) return
 
       // Re-anchor after the async gap so timing stays accurate
       playStartRef.current = Date.now() - fromMs / rate
@@ -192,10 +206,13 @@ export function usePlayback(
 
   useEffect(() => {
     return () => {
-      clearAll()
-      isPlayingRef.current = false
+      resetPlayback()
     }
-  }, [clearAll])
+  }, [resetPlayback])
+
+  useEffect(() => {
+    resetPlayback()
+  }, [song, resetPlayback])
 
   return {
     isPlaying,

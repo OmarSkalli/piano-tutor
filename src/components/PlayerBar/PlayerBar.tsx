@@ -24,7 +24,6 @@ export interface PlayerBarProps {
   // Practice props
   activeHand: ActiveHand
   cropRange: CropRange | null
-  waitMode: boolean
   totalMeasures: number
   practiceStatus: 'idle' | 'waiting' | 'done'
   // Persistent toggles
@@ -39,7 +38,6 @@ export interface PlayerBarProps {
   onSetTempoRate(rate: number): void
   onActiveHandChange(hand: ActiveHand): void
   onCropRangeChange(range: CropRange | null): void
-  onWaitModeToggle(): void
   onPracticeStart(): void
   onPracticeReset(): void
   onToggleLabels(): void
@@ -225,7 +223,6 @@ export function PlayerBar({
   positionMs,
   activeHand,
   cropRange,
-  waitMode,
   totalMeasures,
   practiceStatus,
   showLabels,
@@ -238,7 +235,6 @@ export function PlayerBar({
   onSetTempoRate,
   onActiveHandChange,
   onCropRangeChange,
-  onWaitModeToggle,
   onPracticeStart,
   onPracticeReset,
   onToggleLabels,
@@ -382,38 +378,23 @@ export function PlayerBar({
           </>
         ) : (
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              className={cn('h-7 text-xs', activeToggleClass(waitMode))}
-              onClick={onWaitModeToggle}
-              title="Wait for correct note before advancing"
-            >
-              Wait
-            </Button>
-
-            {waitMode && (
-              <>
-                <Divider />
-                {practiceStatus === 'idle' || practiceStatus === 'done' ? (
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={onPracticeStart}
-                  >
-                    {practiceStatus === 'done' ? 'Restart' : 'Start'}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={onPracticeReset}
-                  >
-                    Reset
-                  </Button>
-                )}
-              </>
+            {practiceStatus === 'idle' || practiceStatus === 'done' ? (
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={onPracticeStart}
+              >
+                {practiceStatus === 'done' ? 'Restart' : 'Start'}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={onPracticeReset}
+              >
+                Reset
+              </Button>
             )}
 
             <Divider />

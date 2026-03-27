@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { PianoKeyboard } from '@/components/PianoKeyboard'
 import {
@@ -185,7 +185,6 @@ function SongView({ songId }: { songId: string }) {
   const [cropRange, setCropRange] = useState<CropRange | null>(
     initialPreferences.cropRange,
   )
-  const [waitMode, setWaitMode] = useState(false)
 
   // Total measure count (1-based, for the crop UI)
   const totalMeasures = useMemo(() => getTotalMeasures(song), [song])
@@ -252,13 +251,12 @@ function SongView({ songId }: { songId: string }) {
 
   const playback = usePlayback(filteredSong, audioEngine)
   const practice = usePractice(filteredSong, midi)
+  const isPracticeMode = mode === 'practice'
 
-  const isWaitActive = mode === 'practice' && waitMode
-
-  const activeNoteIds = isWaitActive
+  const activeNoteIds = isPracticeMode
     ? practice.activeNoteIds
     : playback.activeNoteIds
-  const activeNoteNames = isWaitActive
+  const activeNoteNames = isPracticeMode
     ? practice.activeNoteNames
     : playback.activeNoteNames
   const highlightedNotes = useMemo(
@@ -268,6 +266,14 @@ function SongView({ songId }: { songId: string }) {
         hand,
       })),
     [activeNoteNames],
+  )
+
+  const handlePianoKeyPress = useCallback(
+    async (note: string) => {
+      await audioEngine.prepare()
+      audioEngine.playNote(note, 1200, 96)
+    },
+    [audioEngine],
   )
 
   if (!data) {
@@ -307,7 +313,7 @@ function SongView({ songId }: { songId: string }) {
     setCropRange(range)
   }
 
-  const currentMeasureForSheet = isWaitActive
+  const currentMeasureForSheet = isPracticeMode
     ? practice.currentMeasure
     : playback.isPlaying
       ? null
@@ -325,7 +331,6 @@ function SongView({ songId }: { songId: string }) {
         positionMs={playback.positionMs}
         activeHand={activeHand}
         cropRange={cropRange}
-        waitMode={waitMode}
         totalMeasures={totalMeasures}
         practiceStatus={practice.status}
         showLabels={showLabels}
@@ -338,10 +343,6 @@ function SongView({ songId }: { songId: string }) {
         onSetTempoRate={playback.setTempoRate}
         onActiveHandChange={handleActiveHandChange}
         onCropRangeChange={handleCropRangeChange}
-        onWaitModeToggle={() => {
-          practice.reset()
-          setWaitMode((v) => !v)
-        }}
         onPracticeStart={practice.start}
         onPracticeReset={practice.reset}
         onToggleLabels={() => setShowLabels((v) => !v)}
@@ -360,7 +361,10 @@ function SongView({ songId }: { songId: string }) {
       </div>
       {showPiano && (
         <div className="shrink-0">
-          <PianoKeyboard highlightedNotes={highlightedNotes} />
+          <PianoKeyboard
+            highlightedNotes={highlightedNotes}
+            onNotePress={handlePianoKeyPress}
+          />
         </div>
       )}
     </main>

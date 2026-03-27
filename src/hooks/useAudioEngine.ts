@@ -167,6 +167,14 @@ export function useAudioEngine(): AudioEngine {
     if (!resumedRef.current) {
       console.log('[audio] prepare: resuming (state:', ctx.state, ')')
       await ctx.resume()
+      // Play a silent buffer to fully unlock audio output on iOS — a resumed
+      // context still won't produce sound until a buffer is scheduled within
+      // the gesture handler.
+      const silent = ctx.createBuffer(1, 1, ctx.sampleRate)
+      const src = ctx.createBufferSource()
+      src.buffer = silent
+      src.connect(ctx.destination)
+      src.start()
       resumedRef.current = true
       console.log('[audio] prepare: resumed — state:', ctx.state)
     }

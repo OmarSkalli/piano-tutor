@@ -1,0 +1,13 @@
+{
+  "id": "b9be6a5c98438589c3eaca970385f0a5",
+  "title": "Piano",
+  "composer": null,
+  "keySignature": "C major",
+  "timeSignature": "2/2",
+  "tempo": 190,
+  "hands": {
+    "right": 0,
+    "left": 1
+  },
+  "source": "Sonatina_in_C_major_Op_36_No_1_-_Muzio_Clementi_(Piano_Solo)"
+}

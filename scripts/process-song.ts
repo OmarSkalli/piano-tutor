@@ -68,7 +68,77 @@ const timeSignature = midi.header.timeSignatures[0]
     }
   : { numerator: 4, denominator: 4 }
 
-const ticksPerMeasure = ticksPerQuarter * timeSignature.numerator
+// Build a time signature map so measure boundaries are correct across sig changes.
+// ticksPerMeasure = tpq * numerator * (4 / denominator)
+// e.g. 2/2 → 480*2*(4/2)=1920, 3/4 → 480*3*(4/4)=1440, 3/8 → 480*3*(4/8)=720
+interface TimeSigEvent {
+  tick: number
+  numerator: number
+  denominator: number
+  ticksPerMeasure: number
+  /** Cumulative measure index at the start of this section */
+  measureOffset: number
+}
+
+const rawTimeSigs = midi.header.timeSignatures.length
+  ? midi.header.timeSignatures.map((t) => ({
+      tick: t.ticks,
+      numerator: t.timeSignature[0],
+      denominator: t.timeSignature[1],
+    }))
+  : [{ tick: 0, numerator: 4, denominator: 4 }]
+
+// Deduplicate consecutive identical signatures (some MIDIs re-emit the same sig)
+const dedupedTimeSigs = rawTimeSigs.filter(
+  (t, i) =>
+    i === 0 ||
+    t.numerator !== rawTimeSigs[i - 1].numerator ||
+    t.denominator !== rawTimeSigs[i - 1].denominator,
+)
+
+const timeSigMap: TimeSigEvent[] = []
+for (let i = 0; i < dedupedTimeSigs.length; i++) {
+  const { tick, numerator, denominator } = dedupedTimeSigs[i]
+  const tpm = Math.round(ticksPerQuarter * numerator * (4 / denominator))
+  let measureOffset = 0
+  if (i > 0) {
+    const prev = timeSigMap[i - 1]
+    measureOffset =
+      prev.measureOffset + Math.round((tick - prev.tick) / prev.ticksPerMeasure)
+  }
+  timeSigMap.push({
+    tick,
+    numerator,
+    denominator,
+    ticksPerMeasure: tpm,
+    measureOffset,
+  })
+}
+
+/** Returns the TimeSigEvent in effect at the given tick. */
+function timeSigAt(tick: number): TimeSigEvent {
+  let result = timeSigMap[0]
+  for (const event of timeSigMap) {
+    if (event.tick > tick) break
+    result = event
+  }
+  return result
+}
+
+/** Compute {measureIndex, beatInMeasure} for a given tick. */
+function measurePosition(tick: number): {
+  measureIndex: number
+  beatInMeasure: number
+} {
+  const ts = timeSigAt(tick)
+  const ticksIntoSection = tick - ts.tick
+  const measureIndex =
+    ts.measureOffset + Math.floor(ticksIntoSection / ts.ticksPerMeasure)
+  const beatInMeasure =
+    ((ticksIntoSection % ts.ticksPerMeasure) / ticksPerQuarter) *
+    (4 / ts.denominator)
+  return { measureIndex, beatInMeasure }
+}
 
 // Snap a tick to the nearest subdivision (32nd note = ticksPerQuarter/8)
 const SNAP = ticksPerQuarter / 8
@@ -101,8 +171,7 @@ function fillRests(startTick: number, gapTicks: number): Note[] {
   for (const { name, ticks } of REST_DURATIONS) {
     while (remaining >= ticks - SNAP / 2) {
       const startMs = ticksToMs(cursor)
-      const measureIndex = Math.floor(cursor / ticksPerMeasure)
-      const beatInMeasure = (cursor % ticksPerMeasure) / ticksPerQuarter
+      const { measureIndex, beatInMeasure } = measurePosition(cursor)
       rests.push({
         name: 'rest',
         startMs,
@@ -152,31 +221,51 @@ const tracks: Track[] = midi.tracks.map((track, i) => {
       notes.push(...fillRests(cursor, startTick - cursor))
     }
 
-    const measureIndex = Math.floor(startTick / ticksPerMeasure)
-    const beatInMeasure = (startTick % ticksPerMeasure) / ticksPerQuarter
+    const { measureIndex, beatInMeasure } = measurePosition(startTick)
     const startMs = ticksToMs(startTick)
+
+    // Notated duration = gap to next note start, clamped to the current measure
+    // boundary. Using the raw MIDI duration misreads staccato notes (played short
+    // but notated at full value). The rhythmic intent lives in the start positions.
+    const nextStartTick =
+      midiNotes.indexOf(midiNote) + 1 < midiNotes.length
+        ? snap(midiNotes[midiNotes.indexOf(midiNote) + 1].ticks)
+        : null
+    const ts = timeSigAt(startTick)
+    const ticksIntoSection = startTick - ts.tick
+    const measuresIn = Math.floor(ticksIntoSection / ts.ticksPerMeasure)
+    const measureEnd = ts.tick + (measuresIn + 1) * ts.ticksPerMeasure
+    const slotEnd =
+      nextStartTick !== null ? Math.min(nextStartTick, measureEnd) : measureEnd
+    const slotTicks = slotEnd - startTick
+    const notatedDuration = ticksToNoteDuration(slotTicks)
+    const notatedTicks = REST_DURATIONS.find(
+      (d) => d.name === notatedDuration,
+    )!.ticks
+
     notes.push({
       midi: midiNote.midi,
       name: midiNote.name,
       velocity: Math.round(midiNote.velocity * 100) / 100,
       startMs,
       durationMs: ticksToMs(startTick + durationTicks) - startMs,
-      noteDuration: ticksToNoteDuration(durationTicks),
+      noteDuration: notatedDuration,
       measureIndex,
       beatInMeasure,
       isRest: false,
     })
 
-    // Advance cursor using the quantized (notated) duration, not the raw MIDI
-    // duration — the raw duration is legato/performance timing and overshoots
-    const notatedTicks = REST_DURATIONS.find(
-      (d) => d.name === ticksToNoteDuration(durationTicks),
-    )!.ticks
     cursor = startTick + notatedTicks
   }
 
   // Fill remainder of the final measure so it sums to beatsPerMeasure
-  const endOfMeasure = Math.ceil(cursor / ticksPerMeasure) * ticksPerMeasure
+  const finalTs = timeSigAt(cursor)
+  const ticksIntoFinalSection = cursor - finalTs.tick
+  const measuresIntoSection = Math.ceil(
+    ticksIntoFinalSection / finalTs.ticksPerMeasure,
+  )
+  const endOfMeasure =
+    finalTs.tick + measuresIntoSection * finalTs.ticksPerMeasure
   if (endOfMeasure > cursor + SNAP / 2) {
     notes.push(...fillRests(cursor, endOfMeasure - cursor))
   }
@@ -195,6 +284,11 @@ const songJson = {
   durationMs: lastNote,
   tempoChanges: tempoMap.map(({ tick, bpm }) => ({ tick, bpm })),
   timeSignature,
+  timeSignatureChanges: timeSigMap.map(({ tick, numerator, denominator }) => ({
+    tick,
+    numerator,
+    denominator,
+  })),
   tracks,
 }
 

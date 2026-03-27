@@ -33,6 +33,11 @@ export interface Song {
   durationMs: number
   tempoChanges: { tick: number; bpm: number }[]
   timeSignature: { numerator: number; denominator: number }
+  timeSignatureChanges?: {
+    tick: number
+    numerator: number
+    denominator: number
+  }[]
   tracks: Track[]
 }
 

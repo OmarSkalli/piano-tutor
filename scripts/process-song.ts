@@ -3,6 +3,8 @@ const { Midi } = midiLib as unknown as typeof import('@tonejs/midi')
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
+import { quantizeNoteDuration } from '../src/lib/music'
+import type { Hand, Note, Track } from '../src/types'
 
 const inputPath = process.argv[2]
 
@@ -60,9 +62,6 @@ function ticksToMs(tick: number): number {
   return Math.round(ms)
 }
 
-// Hand assignment
-type Hand = 'right' | 'left' | 'unknown'
-
 function assignHands(trackCount: number): Hand[] {
   if (trackCount === 2) return ['right', 'left']
   if (trackCount === 1) return ['unknown']
@@ -74,19 +73,6 @@ function assignHands(trackCount: number): Hand[] {
 const hands = assignHands(midi.tracks.length)
 const usePitchSplit = midi.tracks.length === 1
 
-interface Note {
-  midi: number
-  name: string
-  velocity: number
-  startMs: number
-  durationMs: number
-}
-
-interface Track {
-  hand: Hand
-  notes: Note[]
-}
-
 const tracks: Track[] = midi.tracks.map((track, i) => {
   const notes: Note[] = track.notes.map((note) => ({
     midi: note.midi,
@@ -95,6 +81,7 @@ const tracks: Track[] = midi.tracks.map((track, i) => {
     startMs: ticksToMs(note.ticks),
     durationMs:
       ticksToMs(note.ticks + note.durationTicks) - ticksToMs(note.ticks),
+    noteDuration: quantizeNoteDuration(note.durationTicks, ticksPerQuarter),
   }))
   const hand: Hand = usePitchSplit ? 'unknown' : (hands[i] ?? 'unknown')
   return { hand, notes }

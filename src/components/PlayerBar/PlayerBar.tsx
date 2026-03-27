@@ -76,6 +76,7 @@ export function PlayerBar({
           size="icon"
           className="shrink-0"
           onMouseDown={isPlaying ? undefined : onPrepare}
+          onTouchStart={isPlaying ? undefined : onPrepare}
           onClick={isPlaying ? onPause : onPlay}
           aria-label={isPlaying ? 'Pause' : 'Play'}
         >

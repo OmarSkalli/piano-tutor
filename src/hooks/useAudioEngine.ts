@@ -23,13 +23,21 @@ export function useAudioEngine(): AudioEngine {
     gain.connect(ctx.destination)
     masterGainRef.current = gain
 
-    const promise = Soundfont.instrument(ctx, 'acoustic_grand_piano', {
-      format: 'mp3',
-      soundfont: 'MusyngKite',
-      nameToUrl: () => '/soundfonts/MusyngKite/acoustic_grand_piano-mp3.js',
-    }).then((player) => {
-      playerRef.current = player
-    })
+    // iOS may create AudioContext in 'suspended' state; resume it within the gesture
+    const resumePromise =
+      ctx.state === 'suspended' ? ctx.resume() : Promise.resolve()
+
+    const promise = resumePromise
+      .then(() =>
+        Soundfont.instrument(ctx, 'acoustic_grand_piano', {
+          format: 'mp3',
+          soundfont: 'MusyngKite',
+          nameToUrl: () => '/soundfonts/MusyngKite/acoustic_grand_piano-mp3.js',
+        }),
+      )
+      .then((player) => {
+        playerRef.current = player
+      })
 
     preparePromiseRef.current = promise
     return promise

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { Gauge, Pause, Piano, Play, Terminal } from 'lucide-react'
+import { ChevronLeft, Gauge, Pause, Piano, Play, Terminal } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -84,7 +85,10 @@ export function PlayerBar({
   return (
     <div className="shrink-0 border-b border-gray-200 px-4 py-2 dark:border-zinc-700">
       <div className="flex items-center gap-2">
-        {/* Title */}
+        {/* Back + Title */}
+        <Link to="/" aria-label="Back to library">
+          <ChevronLeft className="h-4 w-4 shrink-0 text-gray-500 dark:text-zinc-400" />
+        </Link>
         <h1 className="min-w-0 flex-1 truncate text-sm font-semibold">
           {title}
         </h1>

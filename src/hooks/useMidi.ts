@@ -35,7 +35,7 @@ const VIRTUAL_PORT_PATTERNS = [/midi through/i, /through port/i]
 
 function isRealDevice(input: MIDIInput): boolean {
   if (input.state !== 'connected') return false
-  return !VIRTUAL_PORT_PATTERNS.some((re) => re.test(input.name))
+  return !VIRTUAL_PORT_PATTERNS.some((re) => re.test(input.name ?? ''))
 }
 
 function midiToNoteName(n: number): string {
@@ -48,6 +48,7 @@ export function useMidi(): MidiState {
   const accessRef = useRef<MIDIAccess | null>(null)
 
   const handleMessage = useCallback((event: MIDIMessageEvent) => {
+    if (!event.data) return
     const [statusByte, noteNum, velocity] = Array.from(event.data)
     const cmd = statusByte & 0xf0
     const noteName = midiToNoteName(noteNum)
@@ -91,7 +92,7 @@ export function useMidi(): MidiState {
         attachPorts(access)
 
         access.onstatechange = (event: MIDIConnectionEvent) => {
-          if (event.port.type === 'input') {
+          if (event.port?.type === 'input') {
             // Small delay so device is fully ready
             setTimeout(() => {
               if (accessRef.current) attachPorts(accessRef.current)

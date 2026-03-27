@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { PianoKeyboard } from '@/components/PianoKeyboard'
 import {
@@ -15,6 +15,7 @@ import { usePractice } from '@/hooks/usePractice'
 import type { Song, SongMeta } from '@/types'
 
 const SONGS_DIR = '../../songs'
+const SONG_PREFERENCES_STORAGE_KEY = 'piano-tutor:song-prefs:v1'
 
 const songDataMap = import.meta.glob<Song>('../../songs/*/song.json', {
   eager: true,
@@ -42,37 +43,162 @@ const EMPTY_SONG: Song = {
   tracks: [],
 }
 
+interface SongViewPreferences {
+  activeHand: ActiveHand
+  cropRange: CropRange | null
+  showLabels: boolean
+  showPiano: boolean
+}
+
+const DEFAULT_SONG_VIEW_PREFERENCES: SongViewPreferences = {
+  activeHand: 'both',
+  cropRange: null,
+  showLabels: true,
+  showPiano: true,
+}
+
+function getTotalMeasures(song: Song): number {
+  const allNotes = song.tracks.flatMap((track) => track.notes)
+  if (allNotes.length === 0) return 1
+  return allNotes.reduce((max, note) => Math.max(max, note.measureIndex), 0) + 1
+}
+
+function isActiveHand(value: unknown): value is ActiveHand {
+  return value === 'left' || value === 'both' || value === 'right'
+}
+
+function sanitizeCropRange(
+  value: unknown,
+  totalMeasures: number,
+): CropRange | null {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('start' in value) ||
+    !('end' in value)
+  ) {
+    return null
+  }
+
+  const start = Number(value.start)
+  const end = Number(value.end)
+  if (
+    !Number.isInteger(start) ||
+    !Number.isInteger(end) ||
+    start < 1 ||
+    end < start ||
+    end > totalMeasures
+  ) {
+    return null
+  }
+
+  return { start, end }
+}
+
+function readSongPreferencesMap(): Record<string, unknown> {
+  if (typeof window === 'undefined') return {}
+
+  try {
+    const raw = window.localStorage.getItem(SONG_PREFERENCES_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function readSongViewPreferences(
+  songId: string,
+  totalMeasures: number,
+): SongViewPreferences {
+  const stored = readSongPreferencesMap()[songId]
+  if (!stored || typeof stored !== 'object') {
+    return DEFAULT_SONG_VIEW_PREFERENCES
+  }
+  const record = stored as Record<string, unknown>
+
+  return {
+    activeHand: isActiveHand(record.activeHand)
+      ? record.activeHand
+      : DEFAULT_SONG_VIEW_PREFERENCES.activeHand,
+    cropRange: sanitizeCropRange(record.cropRange, totalMeasures),
+    showLabels:
+      typeof record.showLabels === 'boolean'
+        ? record.showLabels
+        : DEFAULT_SONG_VIEW_PREFERENCES.showLabels,
+    showPiano:
+      typeof record.showPiano === 'boolean'
+        ? record.showPiano
+        : DEFAULT_SONG_VIEW_PREFERENCES.showPiano,
+  }
+}
+
+function writeSongViewPreferences(
+  songId: string,
+  preferences: SongViewPreferences,
+): void {
+  if (typeof window === 'undefined') return
+
+  try {
+    const next = readSongPreferencesMap()
+    next[songId] = preferences
+    window.localStorage.setItem(
+      SONG_PREFERENCES_STORAGE_KEY,
+      JSON.stringify(next),
+    )
+  } catch {
+    // Ignore storage failures and fall back to in-memory state.
+  }
+}
+
 export const Route = createFileRoute('/songs/$songId')({
-  component: SongView,
+  component: SongViewRoute,
 })
 
-function SongView() {
+function SongViewRoute() {
   const { songId } = Route.useParams()
+  return <SongView key={songId} songId={songId} />
+}
+
+function SongView({ songId }: { songId: string }) {
   const data = getSongData(songId)
   const audioEngine = useAudioEngine()
   const midi = useMidiContext()
+  const song = data?.song ?? EMPTY_SONG
+  const [initialPreferences] = useState(() =>
+    readSongViewPreferences(songId, getTotalMeasures(song)),
+  )
 
   // Persistent UI toggles
-  const [showLabels, setShowLabels] = useState(true)
-  const [showPiano, setShowPiano] = useState(true)
+  const [showLabels, setShowLabels] = useState(initialPreferences.showLabels)
+  const [showPiano, setShowPiano] = useState(initialPreferences.showPiano)
   const [selectedMeasure, setSelectedMeasure] = useState<number | null>(null)
 
   // Mode
   const [mode, setMode] = useState<AppMode>('playback')
 
   // Practice controls
-  const [activeHand, setActiveHand] = useState<ActiveHand>('both')
-  const [cropRange, setCropRange] = useState<CropRange | null>(null)
+  const [activeHand, setActiveHand] = useState<ActiveHand>(
+    initialPreferences.activeHand,
+  )
+  const [cropRange, setCropRange] = useState<CropRange | null>(
+    initialPreferences.cropRange,
+  )
   const [waitMode, setWaitMode] = useState(false)
 
-  const song = data?.song ?? EMPTY_SONG
-
   // Total measure count (1-based, for the crop UI)
-  const totalMeasures = useMemo(() => {
-    const allNotes = song.tracks.flatMap((t) => t.notes)
-    if (allNotes.length === 0) return 1
-    return allNotes.reduce((max, n) => Math.max(max, n.measureIndex), 0) + 1
-  }, [song])
+  const totalMeasures = useMemo(() => getTotalMeasures(song), [song])
+
+  useEffect(() => {
+    if (!data) return
+    writeSongViewPreferences(songId, {
+      activeHand,
+      cropRange,
+      showLabels,
+      showPiano,
+    })
+  }, [songId, data, activeHand, cropRange, showLabels, showPiano])
 
   const croppedSong = useMemo((): Song => {
     if (cropRange === null) return song

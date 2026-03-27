@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { PianoKeyboard } from '@/components/PianoKeyboard'
-import { PlaybackControls } from '@/components/PlaybackControls'
+import { PlayerBar } from '@/components/PlayerBar'
 import { SheetMusic } from '@/components/SheetMusic'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { usePlayback } from '@/hooks/usePlayback'
@@ -44,8 +44,19 @@ function SongView() {
   const data = getSongData(songId)
   const audioEngine = useAudioEngine()
   const [showLabels, setShowLabels] = useState(true)
-  const { isPlaying, activeNoteIds, activeNoteNames, play, pause } =
-    usePlayback(data?.song ?? EMPTY_SONG, audioEngine)
+  const [selectedMeasure, setSelectedMeasure] = useState<number | null>(null)
+  const {
+    isPlaying,
+    tempoRate,
+    positionMs,
+    activeNoteIds,
+    activeNoteNames,
+    play,
+    pause,
+    seek,
+    setTempoRate,
+    getPositionMs,
+  } = usePlayback(data?.song ?? EMPTY_SONG, audioEngine)
 
   if (!data) {
     return (
@@ -63,25 +74,42 @@ function SongView() {
     }),
   )
 
+  function handleMeasureClick(measureIndex: number) {
+    setSelectedMeasure(measureIndex)
+    const startMs = song.tracks
+      .flatMap((t) => t.notes)
+      .filter((n) => !n.isRest && n.measureIndex === measureIndex)
+      .reduce((min, n) => Math.min(min, n.startMs), Infinity)
+    if (isFinite(startMs)) seek(startMs)
+  }
+
   return (
     <main className="flex h-screen flex-col overflow-hidden">
-      <header className="flex items-center justify-between px-6 py-4">
+      <header className="flex items-center px-6 py-4">
         <h1 className="text-xl font-semibold">{meta.title}</h1>
-        <PlaybackControls
-          isPlaying={isPlaying}
-          onPlay={play}
-          onPause={pause}
-          onPrepare={audioEngine.prepare}
-          showLabels={showLabels}
-          onToggleLabels={() => setShowLabels((v) => !v)}
-        />
       </header>
+      <PlayerBar
+        isPlaying={isPlaying}
+        durationMs={song.durationMs}
+        tempoRate={tempoRate}
+        positionMs={positionMs}
+        showLabels={showLabels}
+        onPlay={play}
+        onPause={pause}
+        onPrepare={audioEngine.prepare}
+        onSeek={seek}
+        onSetTempoRate={setTempoRate}
+        onToggleLabels={() => setShowLabels((v) => !v)}
+        getPositionMs={getPositionMs}
+      />
       <div className="flex-1 overflow-hidden">
         <SheetMusic
           song={song}
           activeNoteIds={activeNoteIds}
           showLabels={showLabels}
           keySignature={meta.keySignature}
+          onMeasureClick={handleMeasureClick}
+          selectedMeasure={isPlaying ? null : selectedMeasure}
         />
       </div>
       <div className="shrink-0">

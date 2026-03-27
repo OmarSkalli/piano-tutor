@@ -15,6 +15,9 @@ export interface SheetMusicProps {
   showLabels: boolean
   /** Raw key signature string from metadata e.g. "G major", "E minor" */
   keySignature?: string | null
+  onMeasureClick?: (measureIndex: number) => void
+  /** Measure to highlight when not playing (e.g. after a seek while paused) */
+  selectedMeasure?: number | null
 }
 
 /** Convert "G major" → "G", "E minor" → "Em", "F# minor" → "F#m", etc. */
@@ -32,6 +35,8 @@ export function SheetMusic({
   activeNoteIds,
   showLabels,
   keySignature,
+  onMeasureClick,
+  selectedMeasure,
 }: SheetMusicProps) {
   const outerRef = useRef<HTMLDivElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
@@ -87,6 +92,32 @@ export function SheetMusic({
     }
   }, [song, showLabels])
 
+  // Measure click → seek
+  useEffect(() => {
+    const page = pageRef.current
+    if (!page || !onMeasureClick) return
+    function handler(e: MouseEvent) {
+      const svg = page!.querySelector('svg') as SVGSVGElement | null
+      if (!svg) return
+      const pt = svg.createSVGPoint()
+      pt.x = e.clientX
+      pt.y = e.clientY
+      const ctm = svg.getScreenCTM()
+      if (!ctm) return
+      const svgPt = pt.matrixTransform(ctm.inverse())
+      const box = measureBoxesRef.current.find(
+        (b) =>
+          svgPt.x >= b.x &&
+          svgPt.x <= b.x + b.width &&
+          svgPt.y >= b.y &&
+          svgPt.y <= b.y + b.height,
+      )
+      if (box) onMeasureClick!(box.measureIndex)
+    }
+    page.addEventListener('click', handler)
+    return () => page.removeEventListener('click', handler)
+  }, [song, showLabels, onMeasureClick])
+
   // Highlight active notes and update measure highlight rect
   useEffect(() => {
     const refs = noteRefsRef.current
@@ -101,13 +132,16 @@ export function SheetMusic({
     const info = getActiveInfo(refs, activeNoteIds)
     const rect = highlightRectRef.current
 
-    if (!info || !rect) {
+    // Use active playback position, or fall back to selectedMeasure when paused
+    const measureIndex = info?.measureIndex ?? selectedMeasure ?? null
+
+    if (measureIndex === null || !rect) {
       if (rect) rect.style.display = 'none'
       return
     }
 
     const box = measureBoxesRef.current.find(
-      (b) => b.measureIndex === info.measureIndex,
+      (b) => b.measureIndex === measureIndex,
     )
     if (box) {
       rect.setAttribute('x', String(box.x))
@@ -117,11 +151,14 @@ export function SheetMusic({
       rect.style.display = 'block'
     }
 
-    if (info.row !== lastScrolledRowRef.current) {
-      lastScrolledRowRef.current = info.row
+    const row =
+      info?.row ??
+      noteRefsRef.current.find((r) => r.measureIndex === measureIndex)?.row
+    if (row !== undefined && row !== lastScrolledRowRef.current) {
+      lastScrolledRowRef.current = row
       const outer = outerRef.current
       const page = pageRef.current
-      const rowBox = rowBoxesRef.current.get(info.row)
+      const rowBox = rowBoxesRef.current.get(row)
       if (outer && page && rowBox) {
         // rowBox.y is in SVG/page space; scroll so the active row lands at ~60%
         // down the viewport, keeping the previous row visible above it.
@@ -133,7 +170,7 @@ export function SheetMusic({
         outer.scrollTo({ top: targetScrollY, behavior: 'smooth' })
       }
     }
-  }, [activeNoteIds])
+  }, [activeNoteIds, selectedMeasure])
 
   return (
     <div
@@ -143,7 +180,7 @@ export function SheetMusic({
       <div className="mx-auto max-w-6xl px-6 py-8">
         <div
           ref={pageRef}
-          className="rounded-sm bg-white shadow-md ring-1 ring-black/5 dark:bg-zinc-50"
+          className={`rounded-sm bg-white shadow-md ring-1 ring-black/5 dark:bg-zinc-50${onMeasureClick ? 'cursor-pointer' : ''}`}
         />
       </div>
     </div>

@@ -6,6 +6,7 @@ export interface PracticeState {
   status: 'idle' | 'waiting' | 'done'
   activeNoteIds: Set<string>
   activeNoteNames: Map<string, Hand>
+  hintNoteIds: Set<string>
   currentMeasure: number | null
   start(): void
   reset(): void
@@ -14,6 +15,14 @@ export interface PracticeState {
 interface Chord {
   notes: Array<{ id: string; name: string; hand: Hand }>
   measureIndex: number
+}
+
+function sameIds(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false
+  for (const id of a) {
+    if (!b.has(id)) return false
+  }
+  return true
 }
 
 function buildChords(song: Song): Chord[] {
@@ -64,6 +73,7 @@ export function usePractice(
   const [activeNoteNames, setActiveNoteNames] = useState<Map<string, Hand>>(
     new Map(),
   )
+  const [hintNoteIds, setHintNoteIds] = useState<Set<string>>(new Set())
   const [currentMeasure, setCurrentMeasure] = useState<number | null>(null)
 
   const chords = useMemo(() => buildChords(song), [song])
@@ -76,8 +86,10 @@ export function usePractice(
     (index: number) => {
       const chord = chords[index]
       if (!chord) return
-      setActiveNoteIds(new Set(chord.notes.map((n) => n.id)))
+      const chordNoteIds = new Set(chord.notes.map((n) => n.id))
+      setActiveNoteIds(chordNoteIds)
       setActiveNoteNames(new Map(chord.notes.map((n) => [n.name, n.hand])))
+      setHintNoteIds((prev) => (prev.size === 0 ? prev : new Set()))
       setCurrentMeasure(chord.measureIndex)
     },
     [chords],
@@ -91,6 +103,7 @@ export function usePractice(
       setStatus('done')
       setActiveNoteIds(new Set())
       setActiveNoteNames(new Map())
+      setHintNoteIds(new Set())
       setCurrentMeasure(null)
     } else {
       chordIndexRef.current = next
@@ -103,6 +116,16 @@ export function usePractice(
     if (statusRef.current !== 'waiting') return
     const chord = chords[chordIndexRef.current]
     if (!chord) return
+    const expectedNotes = new Set(chord.notes.map((n) => n.name))
+    const hasWrongNote =
+      activeNotes.size > 0 &&
+      Array.from(activeNotes).some((note) => !expectedNotes.has(note))
+    if (hasWrongNote) {
+      const chordNoteIds = new Set(chord.notes.map((n) => n.id))
+      setHintNoteIds((prev) =>
+        sameIds(prev, chordNoteIds) ? prev : chordNoteIds,
+      )
+    }
     const allPressed = chord.notes.every((n) => activeNotes.has(n.name))
     if (!allPressed || advanceQueuedRef.current) return
     advanceQueuedRef.current = true
@@ -126,6 +149,7 @@ export function usePractice(
     setStatus('idle')
     setActiveNoteIds(new Set())
     setActiveNoteNames(new Map())
+    setHintNoteIds(new Set())
     setCurrentMeasure(null)
   }, [])
 
@@ -143,6 +167,7 @@ export function usePractice(
     status,
     activeNoteIds,
     activeNoteNames,
+    hintNoteIds,
     currentMeasure,
     start,
     reset,

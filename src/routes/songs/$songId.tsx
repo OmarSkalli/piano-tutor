@@ -17,6 +17,7 @@ import type { Song, SongMeta } from '@/types'
 const SONGS_DIR = '../../songs'
 const SONG_PREFERENCES_STORAGE_KEY = 'piano-tutor:song-prefs:v1'
 const VIRTUAL_PRACTICE_NOTE_MS = 250
+const EMPTY_NOTE_ID_SET = new Set<string>()
 
 const songDataMap = import.meta.glob<Song>('../../songs/*/song.json', {
   eager: true,
@@ -284,6 +285,7 @@ function SongView({ songId }: { songId: string }) {
   const activeNoteNames = isPracticeMode
     ? practice.activeNoteNames
     : playback.activeNoteNames
+  const hintNoteIds = isPracticeMode ? practice.hintNoteIds : EMPTY_NOTE_ID_SET
   const highlightedNotes = useMemo(
     () =>
       Array.from(activeNoteNames.entries()).map(([note, hand]) => ({
@@ -397,6 +399,7 @@ function SongView({ songId }: { songId: string }) {
           song={sheetSong}
           activeNoteIds={activeNoteIds}
           showLabels={showLabels}
+          hintNoteIds={hintNoteIds}
           keySignature={meta.keySignature}
           onMeasureClick={handleMeasureClick}
           selectedMeasure={currentMeasureForSheet}

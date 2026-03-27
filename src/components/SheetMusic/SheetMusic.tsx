@@ -13,6 +13,7 @@ export interface SheetMusicProps {
   song: Song
   activeNoteIds: Set<string>
   showLabels: boolean
+  hintNoteIds?: Set<string>
   /** Raw key signature string from metadata e.g. "G major", "E minor" */
   keySignature?: string | null
   onMeasureClick?: (measureIndex: number) => void
@@ -34,6 +35,7 @@ export function SheetMusic({
   song,
   activeNoteIds,
   showLabels,
+  hintNoteIds = new Set(),
   keySignature,
   onMeasureClick,
   selectedMeasure,
@@ -53,6 +55,7 @@ export function SheetMusic({
 
     const { noteRefs, measureBoxes } = renderSheet(pageRef.current, song, {
       showLabels,
+      hintNoteIds,
       width: pageRef.current.clientWidth,
       keySignature: toVFKeySpec(keySignature),
     })
@@ -89,7 +92,7 @@ export function SheetMusic({
       svg.insertBefore(rect, svg.firstChild)
       highlightRectRef.current = rect
     }
-  }, [song, showLabels, keySignature])
+  }, [song, showLabels, hintNoteIds, keySignature])
 
   // Re-render sheet when song or label toggle changes
   useEffect(() => {
@@ -206,7 +209,7 @@ export function SheetMusic({
         outer.scrollTo({ top: targetScrollY, behavior: 'smooth' })
       }
     }
-  }, [activeNoteIds, selectedMeasure])
+  }, [activeNoteIds, selectedMeasure, renderSheetCallback])
 
   return (
     <div

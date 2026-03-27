@@ -37,6 +37,7 @@ export interface SheetRefs {
 
 export interface RenderOpts {
   showLabels: boolean
+  hintNoteIds?: Set<string>
   width: number
   /** VexFlow key spec e.g. "G", "Em", "Bb" — converted from metadata before passing in */
   keySignature?: string
@@ -298,6 +299,7 @@ export function renderSheet(
   const pendingLabels: Array<{
     vfNote: StaveNote
     label: string
+    id: string
   }> = []
   // Per-row stave references, set during the draw loop, used for label Y positioning
   const rowStaves: Array<{ treble: Stave; bass: Stave }> = []
@@ -324,8 +326,12 @@ export function renderSheet(
     if (!note.isRest) {
       const acc = getAccidental(note.name)
       if (acc) vfNote.addModifier(new Accidental(acc), 0)
-      if (opts.showLabels) {
-        pendingLabels.push({ vfNote, label: note.name.replace(/\d+$/, '') })
+      if (opts.showLabels || opts.hintNoteIds?.has(id)) {
+        pendingLabels.push({
+          vfNote,
+          label: note.name.replace(/\d+$/, ''),
+          id,
+        })
       }
       pendingRefs.push({ vfNote, id, hand, row, measureIndex: mi })
     }
@@ -491,7 +497,7 @@ export function renderSheet(
 
   // Draw note name labels positioned on the open side of the note (away from stem)
   // and wire them into noteRefs so they highlight along with the note.
-  if (opts.showLabels && pendingLabels.length > 0 && svgEl) {
+  if (pendingLabels.length > 0 && svgEl) {
     for (const { vfNote, label } of pendingLabels) {
       const x = (vfNote.getNoteHeadBeginX() + vfNote.getNoteHeadEndX()) / 2
       if (!x) continue

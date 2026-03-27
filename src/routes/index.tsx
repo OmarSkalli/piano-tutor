@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { MidiStatusBadge } from '@/components/MidiStatusBadge'
+import { useMidiContext } from '@/context/MidiContext'
 import library from '../songs/library.json'
 import type { LibraryEntry } from '../types'
 
@@ -11,9 +13,14 @@ export const Route = createFileRoute('/')({
 })
 
 function SongLibrary() {
+  const { status, openModal } = useMidiContext()
+
   return (
     <main className="mx-auto max-w-lg p-6">
-      <h1 className="mb-6 text-2xl font-semibold">Songs</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Songs</h1>
+        <MidiStatusBadge status={status} onClick={openModal} />
+      </div>
       <ul className="divide-y">
         {songs.map((song) => (
           <li key={song.id}>

@@ -53,23 +53,20 @@ export function usePlayback(
   }, [])
 
   const scheduleFrom = useCallback(
-    (fromMs: number, rate: number) => {
+    async (fromMs: number, rate: number) => {
       clearAll()
       setActiveNoteIds(new Set())
       setActiveNoteNames(new Map())
 
-      // Anchor: playStartRef marks the wall-clock time corresponding to fromMs.
-      // getPositionMs() computes: (Date.now() - playStartRef) * rate
-      // At t=0: (playStartRef - playStartRef) * rate = 0 + fromMs ... need offset.
-      // We store playStartRef such that elapsed * rate + fromMs would be wrong.
-      // Correct: elapsed * rate = currentMs - fromMs, so currentMs = elapsed * rate + fromMs
-      // But getPositionMs returns (Date.now() - playStartRef) * rate
-      // So playStartRef = Date.now() - fromMs / rate
+      // Wait for AudioContext to resume and soundfont to finish loading before
+      // scheduling notes — on mobile the network load can take longer than the
+      // first setTimeout delay, causing playNote to silently no-op.
+      await audioEngine.prepare()
+
+      // Re-anchor after the async gap so timing stays accurate
       playStartRef.current = Date.now() - fromMs / rate
       isPlayingRef.current = true
       setIsPlaying(true)
-
-      audioEngine.prepare()
 
       for (let ti = 0; ti < song.tracks.length; ti++) {
         const track = song.tracks[ti]

@@ -15,8 +15,9 @@ Catalogue of all product specifications.
 
 ## Planned Specs
 
-| Title | Status | Owner | Updated | Summary |
-| ----- | ------ | ----- | ------- | ------- |
+| Title                           | Status     | Owner       | Updated    | Summary                                                         |
+| ------------------------------- | ---------- | ----------- | ---------- | --------------------------------------------------------------- |
+| [Song Library](song-library.md) | 📋 Planned | Omar Skalli | 2026-03-26 | Alphabetical list of songs; clicking a song opens its Song View |
 
 ## Status Legend
 

@@ -30,3 +30,8 @@ export interface Song {
   timeSignature: { numerator: number; denominator: number }
   tracks: Track[]
 }
+
+export interface LibraryEntry {
+  id: string
+  title: string
+}

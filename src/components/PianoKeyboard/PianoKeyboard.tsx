@@ -11,10 +11,11 @@ export interface PianoKeyboardProps {
   highlightedNotes?: HighlightedNote[]
 }
 
-const WHITE_KEY_WIDTH = 32
-const WHITE_KEY_HEIGHT = 120
-const BLACK_KEY_WIDTH = 20
-const BLACK_KEY_HEIGHT = 74
+// Canonical key proportions (white key = 1 unit wide, 5 units tall)
+const WHITE_KEY_ASPECT = 5
+const BLACK_KEY_WIDTH_RATIO = 0.6 // relative to white key width
+const BLACK_KEY_HEIGHT_RATIO = 0.62 // relative to white key height
+const NUM_WHITE_KEYS = WHITE_NOTES.length
 
 export function PianoKeyboard({ highlightedNotes = [] }: PianoKeyboardProps) {
   const highlightMap = new Map<string, Hand>()
@@ -22,64 +23,76 @@ export function PianoKeyboard({ highlightedNotes = [] }: PianoKeyboardProps) {
     highlightMap.set(normalizeNote(note), hand)
   }
 
-  const totalWidth = WHITE_NOTES.length * WHITE_KEY_WIDTH
+  // Scale: fill available width, maintaining proportions
+  // Use percentage-based widths so it's always correct
+  const whiteKeyWidthPct = 100 / NUM_WHITE_KEYS
+  const blackKeyWidthPct = whiteKeyWidthPct * BLACK_KEY_WIDTH_RATIO
+
+  // Height is derived from aspect ratio: height = width / NUM_WHITE_KEYS * WHITE_KEY_ASPECT
+  // We express this as a padding-top trick on the container
+  const heightAsPct = (WHITE_KEY_ASPECT / NUM_WHITE_KEYS) * 100
 
   return (
-    <div className="overflow-x-auto py-3">
-      <div
-        style={{
-          position: 'relative',
-          width: totalWidth,
-          height: WHITE_KEY_HEIGHT,
-        }}
-        className="select-none"
-      >
-        {/* White keys */}
-        {WHITE_NOTES.map((note, i) => {
-          const hand = highlightMap.get(note)
-          return (
-            <div
-              key={note}
-              style={{
-                position: 'absolute',
-                left: i * WHITE_KEY_WIDTH,
-                width: WHITE_KEY_WIDTH - 1,
-                height: WHITE_KEY_HEIGHT,
-                backgroundColor: hand
-                  ? hand === 'right'
-                    ? 'var(--color-hand-right)'
-                    : 'var(--color-hand-left)'
-                  : 'white',
-                border: '1px solid #ccc',
-                borderRadius: '0 0 4px 4px',
-                boxSizing: 'border-box',
-              }}
-            />
-          )
-        })}
+    <div className="bg-background border-t px-6 py-4">
+      {/* max-w caps the keyboard on wide screens; mx-auto centers it */}
+      <div className="mx-auto w-full max-w-4xl">
+        <div
+          style={{
+            position: 'relative',
+            width: '100%',
+            paddingTop: `${heightAsPct}%`,
+          }}
+          className="select-none"
+        >
+          <div style={{ position: 'absolute', inset: 0 }}>
+            {/* White keys */}
+            {WHITE_NOTES.map((note, i) => {
+              const hand = highlightMap.get(note)
+              return (
+                <div
+                  key={note}
+                  style={{
+                    position: 'absolute',
+                    left: `${i * whiteKeyWidthPct}%`,
+                    width: `calc(${whiteKeyWidthPct}% - 1px)`,
+                    height: '100%',
+                    backgroundColor: hand
+                      ? hand === 'right'
+                        ? 'var(--color-hand-right)'
+                        : 'var(--color-hand-left)'
+                      : 'white',
+                    border: '1px solid #ccc',
+                    borderRadius: '0 0 4px 4px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              )
+            })}
 
-        {/* Black keys */}
-        {BLACK_KEYS.map(({ note, offset }) => {
-          const hand = highlightMap.get(note)
-          return (
-            <div
-              key={note}
-              style={{
-                position: 'absolute',
-                left: offset * WHITE_KEY_WIDTH,
-                width: BLACK_KEY_WIDTH,
-                height: BLACK_KEY_HEIGHT,
-                backgroundColor: hand
-                  ? hand === 'right'
-                    ? 'var(--color-hand-right)'
-                    : 'var(--color-hand-left)'
-                  : '#222',
-                borderRadius: '0 0 3px 3px',
-                zIndex: 1,
-              }}
-            />
-          )
-        })}
+            {/* Black keys */}
+            {BLACK_KEYS.map(({ note, offset }) => {
+              const hand = highlightMap.get(note)
+              return (
+                <div
+                  key={note}
+                  style={{
+                    position: 'absolute',
+                    left: `${offset * whiteKeyWidthPct}%`,
+                    width: `${blackKeyWidthPct}%`,
+                    height: `${BLACK_KEY_HEIGHT_RATIO * 100}%`,
+                    backgroundColor: hand
+                      ? hand === 'right'
+                        ? 'var(--color-hand-right)'
+                        : 'var(--color-hand-left)'
+                      : '#222',
+                    borderRadius: '0 0 3px 3px',
+                    zIndex: 1,
+                  }}
+                />
+              )
+            })}
+          </div>
+        </div>
       </div>
     </div>
   )

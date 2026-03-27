@@ -9,8 +9,6 @@ export interface PlaybackState {
   activeNoteIds: Set<string>
   /** note name → Hand, for PianoKeyboard highlighting */
   activeNoteNames: Map<string, Hand>
-  /** Playback progress 0–1; SheetMusic converts to px scroll offset */
-  playbackProgress: number
   play(): void
   pause(): void
 }
@@ -24,19 +22,12 @@ export function usePlayback(
   const [activeNoteNames, setActiveNoteNames] = useState<Map<string, Hand>>(
     new Map(),
   )
-  const [playbackProgress, setPlaybackProgress] = useState(0)
 
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([])
-  const rafRef = useRef<number | null>(null)
-  const startWallTimeRef = useRef<number>(0)
 
   const clearAll = useCallback(() => {
     for (const t of timeoutsRef.current) clearTimeout(t)
     timeoutsRef.current = []
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
-    }
   }, [])
 
   const play = useCallback(() => {
@@ -44,44 +35,54 @@ export function usePlayback(
     setIsPlaying(true)
     setActiveNoteIds(new Set())
     setActiveNoteNames(new Map())
-    setPlaybackProgress(0)
 
-    const startWall = Date.now()
-    startWallTimeRef.current = startWall
+    // Start the song clock now (anchored to the user gesture), then kick off
+    // sample loading. Notes fire at their note.startMs offsets from playStart.
+    // playNote silently no-ops if samples aren't ready yet — but prepare() is
+    // fast on subsequent plays since the promise is cached.
+    const playStart = Date.now()
+    audioEngine.prepare()
 
     for (let ti = 0; ti < song.tracks.length; ti++) {
       const track = song.tracks[ti]
       const hand = track.hand
 
+      let realNoteIndex = 0
       for (let ni = 0; ni < track.notes.length; ni++) {
         const note = track.notes[ni]
-        const id = noteId(ti, ni)
+        if (note.isRest) continue
+
+        const id = noteId(ti, realNoteIndex++)
         const noteName = note.name
+        const delay = note.startMs - (Date.now() - playStart)
 
-        const onT = setTimeout(() => {
-          audioEngine.playNote(
-            noteName,
-            note.durationMs,
-            Math.round(note.velocity * 127),
-          )
-          setActiveNoteIds((prev) => new Set([...prev, id]))
-          setActiveNoteNames((prev) => new Map(prev).set(noteName, hand))
+        const onT = setTimeout(
+          () => {
+            audioEngine.playNote(
+              noteName,
+              note.durationMs,
+              Math.round((note.velocity ?? 0.8) * 127),
+            )
+            setActiveNoteIds((prev) => new Set([...prev, id]))
+            setActiveNoteNames((prev) => new Map(prev).set(noteName, hand))
 
-          const offT = setTimeout(() => {
-            setActiveNoteIds((prev) => {
-              const next = new Set(prev)
-              next.delete(id)
-              return next
-            })
-            setActiveNoteNames((prev) => {
-              const next = new Map(prev)
-              next.delete(noteName)
-              return next
-            })
-          }, note.durationMs)
+            const offT = setTimeout(() => {
+              setActiveNoteIds((prev) => {
+                const next = new Set(prev)
+                next.delete(id)
+                return next
+              })
+              setActiveNoteNames((prev) => {
+                const next = new Map(prev)
+                next.delete(noteName)
+                return next
+              })
+            }, note.durationMs)
 
-          timeoutsRef.current.push(offT)
-        }, note.startMs)
+            timeoutsRef.current.push(offT)
+          },
+          Math.max(0, delay),
+        )
 
         timeoutsRef.current.push(onT)
       }
@@ -93,19 +94,8 @@ export function usePlayback(
       setIsPlaying(false)
       setActiveNoteIds(new Set())
       setActiveNoteNames(new Map())
-      setPlaybackProgress(0)
     }, song.durationMs)
     timeoutsRef.current.push(endT)
-
-    // Progress via rAF — SheetMusic converts to px scroll offset
-    const totalDuration = song.durationMs
-    function tick() {
-      const elapsed = Date.now() - startWallTimeRef.current
-      if (elapsed >= totalDuration) return
-      setPlaybackProgress(Math.min(elapsed / totalDuration, 1))
-      rafRef.current = requestAnimationFrame(tick)
-    }
-    rafRef.current = requestAnimationFrame(tick)
   }, [isPlaying, song, audioEngine, clearAll])
 
   const pause = useCallback(() => {
@@ -113,12 +103,5 @@ export function usePlayback(
     setIsPlaying(false)
   }, [clearAll])
 
-  return {
-    isPlaying,
-    activeNoteIds,
-    activeNoteNames,
-    playbackProgress,
-    play,
-    pause,
-  }
+  return { isPlaying, activeNoteIds, activeNoteNames, play, pause }
 }

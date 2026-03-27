@@ -5,6 +5,8 @@ export interface PlaybackControlsProps {
   isPlaying: boolean
   onPlay(): void
   onPause(): void
+  /** Called on mousedown to start loading audio samples before play fires */
+  onPrepare(): void
   showLabels: boolean
   onToggleLabels(): void
 }
@@ -13,6 +15,7 @@ export function PlaybackControls({
   isPlaying,
   onPlay,
   onPause,
+  onPrepare,
   showLabels,
   onToggleLabels,
 }: PlaybackControlsProps) {
@@ -21,6 +24,7 @@ export function PlaybackControls({
       <Button
         variant="outline"
         size="icon"
+        onMouseDown={isPlaying ? undefined : onPrepare}
         onClick={isPlaying ? onPause : onPlay}
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >

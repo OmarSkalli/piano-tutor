@@ -44,14 +44,8 @@ function SongView() {
   const data = getSongData(songId)
   const audioEngine = useAudioEngine()
   const [showLabels, setShowLabels] = useState(true)
-  const {
-    isPlaying,
-    activeNoteIds,
-    activeNoteNames,
-    playbackProgress,
-    play,
-    pause,
-  } = usePlayback(data?.song ?? EMPTY_SONG, audioEngine)
+  const { isPlaying, activeNoteIds, activeNoteNames, play, pause } =
+    usePlayback(data?.song ?? EMPTY_SONG, audioEngine)
 
   if (!data) {
     return (
@@ -77,6 +71,7 @@ function SongView() {
           isPlaying={isPlaying}
           onPlay={play}
           onPause={pause}
+          onPrepare={audioEngine.prepare}
           showLabels={showLabels}
           onToggleLabels={() => setShowLabels((v) => !v)}
         />
@@ -86,7 +81,7 @@ function SongView() {
           song={song}
           activeNoteIds={activeNoteIds}
           showLabels={showLabels}
-          playbackProgress={playbackProgress}
+          keySignature={meta.keySignature}
         />
       </div>
       <div className="shrink-0">

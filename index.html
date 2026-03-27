@@ -5,8 +5,25 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>piano-tutor-src</title>
+    <style>
+      #loading-bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 3px;
+        background: #a78bfa;
+        animation: loading 1.8s ease-in-out infinite;
+        z-index: 9999;
+      }
+      @keyframes loading {
+        0%   { width: 0%;   opacity: 1; }
+        70%  { width: 85%;  opacity: 1; }
+        100% { width: 100%; opacity: 0; }
+      }
+    </style>
   </head>
   <body>
+    <div id="loading-bar"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

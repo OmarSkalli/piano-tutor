@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { PianoKeyboard } from '@/components/PianoKeyboard'
 import { PlayerBar } from '@/components/PlayerBar'
@@ -46,32 +46,6 @@ function SongView() {
   const [showLabels, setShowLabels] = useState(true)
   const [showPiano, setShowPiano] = useState(true)
   const [selectedMeasure, setSelectedMeasure] = useState<number | null>(null)
-  const [debugLogs, setDebugLogs] = useState<string[]>([])
-  const [showDebug, setShowDebug] = useState(false)
-  const origConsole = useRef({ log: console.log, error: console.error })
-
-  useEffect(() => {
-    const { log, error } = origConsole.current
-    const push = (prefix: string, args: unknown[]) => {
-      const msg = args
-        .map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a)))
-        .join(' ')
-      if (msg.includes('[audio]'))
-        setDebugLogs((prev) => [...prev.slice(-19), `${prefix}${msg}`])
-    }
-    console.log = (...args) => {
-      log(...args)
-      push('', args)
-    }
-    console.error = (...args) => {
-      error(...args)
-      push('ERR ', args)
-    }
-    return () => {
-      console.log = log
-      console.error = error
-    }
-  }, [])
   const {
     isPlaying,
     tempoRate,
@@ -95,10 +69,7 @@ function SongView() {
 
   const { song, meta } = data
   const highlightedNotes = Array.from(activeNoteNames.entries()).map(
-    ([note, hand]) => ({
-      note,
-      hand,
-    }),
+    ([note, hand]) => ({ note, hand }),
   )
 
   function handleMeasureClick(measureIndex: number) {
@@ -121,7 +92,6 @@ function SongView() {
         positionMs={positionMs}
         showLabels={showLabels}
         showPiano={showPiano}
-        showDebug={showDebug}
         onPlay={play}
         onPause={pause}
         onPrepare={audioEngine.prepare}
@@ -129,7 +99,6 @@ function SongView() {
         onSetTempoRate={setTempoRate}
         onToggleLabels={() => setShowLabels((v) => !v)}
         onTogglePiano={() => setShowPiano((v) => !v)}
-        onToggleDebug={() => setShowDebug((v) => !v)}
         getPositionMs={getPositionMs}
       />
       <div className="flex-1 overflow-hidden">
@@ -142,19 +111,11 @@ function SongView() {
           selectedMeasure={isPlaying ? null : selectedMeasure}
         />
       </div>
-      {showDebug ? (
-        <div className="max-h-40 shrink-0 overflow-y-auto bg-black/90 px-2 py-1 font-mono text-xs text-green-400">
-          {debugLogs.length === 0 ? (
-            <div className="text-green-600">no logs yet</div>
-          ) : (
-            debugLogs.map((l, i) => <div key={i}>{l}</div>)
-          )}
-        </div>
-      ) : showPiano ? (
+      {showPiano && (
         <div className="shrink-0">
           <PianoKeyboard highlightedNotes={highlightedNotes} />
         </div>
-      ) : null}
+      )}
     </main>
   )
 }

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 
 const NOTES_URL = '/soundfonts/MusyngKite/notes'
 
-// All available notes in the soundfont
 const SOUNDFONT_NOTES = [
   'A0',
   'Bb0',
@@ -94,7 +93,6 @@ const SOUNDFONT_NOTES = [
   'C8',
 ]
 
-// Map note name to nearest available soundfont note (handles enharmonics like C# → Db)
 const ENHARMONICS: Record<string, string> = {
   'C#': 'Db',
   'D#': 'Eb',
@@ -107,8 +105,7 @@ function resolveNote(name: string): string {
   if (!match) return name
   const [, letter, acc, oct] = match
   const pc = acc ? letter + acc : letter
-  const resolved = ENHARMONICS[pc] ?? pc
-  return resolved + oct
+  return (ENHARMONICS[pc] ?? pc) + oct
 }
 
 export interface AudioEngine {
@@ -127,26 +124,17 @@ export function useAudioEngine(): AudioEngine {
   useEffect(() => {
     const ctx = new AudioContext()
     ctxRef.current = ctx
-    console.log('[audio] warmup: decoding', SOUNDFONT_NOTES.length, 'notes')
 
     warmupPromiseRef.current = Promise.all(
       SOUNDFONT_NOTES.map(async (note) => {
-        const filename = note.replace('#', 's') + '.mp3'
-        const res = await fetch(`${NOTES_URL}/${filename}`)
+        const res = await fetch(`${NOTES_URL}/${note.replace('#', 's')}.mp3`)
         const arrayBuf = await res.arrayBuffer()
         const audioBuf = await ctx.decodeAudioData(arrayBuf)
         buffersRef.current.set(note, audioBuf)
       }),
     )
-      .then(() => {
-        console.log(
-          '[audio] warmup done —',
-          buffersRef.current.size,
-          'buffers ready',
-        )
-      })
-      .catch((e) => {
-        console.error('[audio] warmup error', e)
+      .then(() => {})
+      .catch(() => {
         warmupPromiseRef.current = null
       })
       .finally(() => setIsPreloading(false))
@@ -165,42 +153,24 @@ export function useAudioEngine(): AudioEngine {
     if (!ctx) return
 
     if (!resumedRef.current) {
-      console.log('[audio] prepare: resuming (state:', ctx.state, ')')
       await ctx.resume()
-      // Play a silent buffer to fully unlock audio output on iOS — a resumed
-      // context still won't produce sound until a buffer is scheduled within
-      // the gesture handler.
+      // Play a silent buffer to fully unlock audio output on iOS
       const silent = ctx.createBuffer(1, 1, ctx.sampleRate)
       const src = ctx.createBufferSource()
       src.buffer = silent
       src.connect(ctx.destination)
       src.start()
       resumedRef.current = true
-      console.log('[audio] prepare: resumed — state:', ctx.state)
     }
 
-    if (warmupPromiseRef.current) {
-      console.log('[audio] prepare: waiting for decode to finish')
-      await warmupPromiseRef.current
-    }
+    if (warmupPromiseRef.current) await warmupPromiseRef.current
   }
 
   function playNote(noteName: string, durationMs: number, velocity = 80) {
     const ctx = ctxRef.current
     if (!ctx) return
 
-    const resolved = resolveNote(noteName)
-    const buffer = buffersRef.current.get(resolved)
-    console.log(
-      '[audio] playNote',
-      noteName,
-      '→',
-      resolved,
-      'ctx:',
-      ctx.state,
-      'buf:',
-      !!buffer,
-    )
+    const buffer = buffersRef.current.get(resolveNote(noteName))
     if (!buffer) return
 
     const gain = ctx.createGain()

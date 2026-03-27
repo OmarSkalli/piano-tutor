@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { ChevronLeft, Gauge, Pause, Piano, Play, Terminal } from 'lucide-react'
+import { ChevronLeft, Gauge, Pause, Piano, Play } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -19,10 +19,8 @@ export interface PlayerBarProps {
   onPrepare(): void
   onSeek(ms: number): void
   onSetTempoRate(rate: number): void
-  showDebug: boolean
   onToggleLabels(): void
   onTogglePiano(): void
-  onToggleDebug(): void
   getPositionMs(): number
 }
 
@@ -45,10 +43,8 @@ export function PlayerBar({
   onPrepare,
   onSeek,
   onSetTempoRate,
-  showDebug,
   onToggleLabels,
   onTogglePiano,
-  onToggleDebug,
   getPositionMs,
 }: PlayerBarProps) {
   const scrubberRef = useRef<HTMLInputElement>(null)
@@ -205,16 +201,6 @@ export function PlayerBar({
             title="Toggle piano"
           >
             <Piano className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className={cn('h-7 w-7', showDebug && 'bg-accent')}
-            onClick={onToggleDebug}
-            aria-label={showDebug ? 'Hide debug log' : 'Show debug log'}
-            title="Toggle debug log"
-          >
-            <Terminal className="h-4 w-4" />
           </Button>
         </div>
       </div>

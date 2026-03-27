@@ -49,6 +49,8 @@
 }
 
 :root {
+  --color-hand-right: oklch(0.6 0.2 250); /* blue — right hand highlights */
+  --color-hand-left: oklch(0.7 0.18 80); /* amber — left hand highlights */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

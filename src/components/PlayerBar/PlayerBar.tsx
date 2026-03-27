@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Gauge, Pause, Piano, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 export interface PlayerBarProps {
   title: string
@@ -170,7 +171,10 @@ export function PlayerBar({
           <Button
             variant="outline"
             size="icon"
-            className={`h-7 w-7 text-xs font-bold${showLabels ? 'bg-accent' : ''}`}
+            className={cn(
+              'h-7 w-7 text-xs font-bold',
+              showLabels && 'bg-accent',
+            )}
             onClick={onToggleLabels}
             aria-label={showLabels ? 'Hide note names' : 'Show note names'}
             title="Toggle note names"
@@ -180,7 +184,7 @@ export function PlayerBar({
           <Button
             variant="outline"
             size="icon"
-            className={`h-7 w-7${showPiano ? 'bg-accent' : ''}`}
+            className={cn('h-7 w-7', showPiano && 'bg-accent')}
             onClick={onTogglePiano}
             aria-label={showPiano ? 'Hide piano' : 'Show piano'}
             title="Toggle piano"

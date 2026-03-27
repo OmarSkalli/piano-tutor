@@ -281,7 +281,10 @@ export function renderSheet(
   const numRows = rows.length
   const totalHeight = MARGIN_TOP + numRows * rowHeight + MARGIN_TOP
 
-  const renderer = new Renderer(container, Renderer.Backends.SVG)
+  const renderer = new Renderer(
+    container as HTMLDivElement,
+    Renderer.Backends.SVG,
+  )
   renderer.resize(containerWidth, totalHeight)
   const ctx = renderer.getContext()
 

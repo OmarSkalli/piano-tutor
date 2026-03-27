@@ -1,7 +1,5 @@
 import {
   Accidental,
-  Annotation,
-  AnnotationVerticalJustify,
   Beam,
   Formatter,
   Renderer,
@@ -71,16 +69,68 @@ export function renderSheet(
   const rightTrackIndex = song.tracks.indexOf(rightTrack)
   const leftTrackIndex = song.tracks.indexOf(leftTrack)
 
-  const beatsPerMeasure = song.timeSignature.numerator
-
   // Notes are pre-grouped by measureIndex — no timing math needed here
   const rightMeasures = groupMeasures(rightTrack.notes)
   const leftMeasures = groupMeasures(leftTrack.notes)
   const totalMeasures = Math.max(rightMeasures.length, leftMeasures.length)
 
-  // Use VexFlow's standard beam groups for this time signature
+  // Build a per-measure time signature lookup from timeSignatureChanges.
+  // Each entry maps the first measure of that section → { numerator, denominator }.
+  const timeSigChanges = song.timeSignatureChanges ?? [
+    {
+      tick: 0,
+      numerator: song.timeSignature.numerator,
+      denominator: song.timeSignature.denominator,
+    },
+  ]
+
+  // For each section, compute its starting measureIndex using the same formula as process-song.ts
+  const tpq = song.ticksPerQuarter
+  interface SectionSig {
+    measureIndex: number
+    numerator: number
+    denominator: number
+  }
+  const sectionSigs: SectionSig[] = []
+  for (let i = 0; i < timeSigChanges.length; i++) {
+    const { tick, numerator, denominator } = timeSigChanges[i]
+    let measureIndex = 0
+    if (i > 0) {
+      const prev = timeSigChanges[i - 1]
+      const prevTpm = Math.round(tpq * prev.numerator * (4 / prev.denominator))
+      measureIndex =
+        sectionSigs[i - 1].measureIndex +
+        Math.round((tick - prev.tick) / prevTpm)
+    }
+    sectionSigs.push({ measureIndex, numerator, denominator })
+  }
+
+  /** Return the time signature in effect for a given measureIndex. */
+  function timeSigForMeasure(mi: number): {
+    numerator: number
+    denominator: number
+  } {
+    let result = sectionSigs[0]
+    for (const s of sectionSigs) {
+      if (s.measureIndex > mi) break
+      result = s
+    }
+    return result
+  }
+
+  function beamGroupsForMeasure(
+    mi: number,
+  ): ReturnType<typeof Beam.getDefaultBeamGroups> {
+    const { numerator, denominator } = timeSigForMeasure(mi)
+    // 2/2 default is 1/2 (groups of 4 eighths) — too coarse for sparse eighth
+    // passages. Use 1/4 (quarter-note groups) like 4/4 so pairs of eighths beam.
+    if (numerator === 2 && denominator === 2) {
+      return Beam.getDefaultBeamGroups('4/4')
+    }
+    return Beam.getDefaultBeamGroups(`${numerator}/${denominator}`)
+  }
+
   const timeSigStr = `${song.timeSignature.numerator}/${song.timeSignature.denominator}`
-  const beamGroups = Beam.getDefaultBeamGroups(timeSigStr)
 
   const containerWidth = opts.width || 900
   const usableWidth = containerWidth - MARGIN_H * 2
@@ -113,6 +163,7 @@ export function renderSheet(
     clef: 'treble' | 'bass',
     isFirstMeasure: boolean,
     isRowStart: boolean,
+    mi: number,
   ) {
     if (isFirstMeasure) {
       stave.addClef(clef).addTimeSignature(timeSigStr)
@@ -121,13 +172,17 @@ export function renderSheet(
       stave.addClef(clef)
       if (keySig) stave.addKeySignature(keySig)
     }
+    // Show measure number on treble stave only, at the start of each row
+    if (clef === 'treble' && (isFirstMeasure || isRowStart)) {
+      stave.setMeasure(mi + 1)
+    }
   }
 
   // getNoteStartX() only works after draw(); probe a throwaway stave to get the
   // clef/timesig/keysig overhead width without polluting the real canvas.
   function modifierOverhead(isFirst: boolean, isRowStart: boolean): number {
     const probe = new Stave(0, 0, 1000)
-    addStaveModifiers(probe, 'treble', isFirst, isRowStart)
+    addStaveModifiers(probe, 'treble', isFirst, isRowStart, 0)
     const tmp = document.createElement('div')
     const tmpR = new Renderer(tmp, Renderer.Backends.SVG)
     tmpR.resize(2000, 200)
@@ -170,14 +225,15 @@ export function renderSheet(
             duration: dur,
           })
     })
+    const { numerator: num, denominator: den } = timeSigForMeasure(mi)
     const voices: Voice[] = []
     if (rightNotes.length > 0) {
-      const v = new Voice({ numBeats: beatsPerMeasure, beatValue: 4 })
+      const v = new Voice({ numBeats: num, beatValue: den })
       v.setMode(VoiceMode.SOFT).addTickables(rightNotes)
       voices.push(v)
     }
     if (leftNotes.length > 0) {
-      const v = new Voice({ numBeats: beatsPerMeasure, beatValue: 4 })
+      const v = new Voice({ numBeats: num, beatValue: den })
       v.setMode(VoiceMode.SOFT).addTickables(leftNotes)
       voices.push(v)
     }
@@ -236,6 +292,12 @@ export function renderSheet(
     row: number
     measureIndex: number
   }> = []
+  const pendingLabels: Array<{
+    vfNote: StaveNote
+    label: string
+  }> = []
+  // Per-row stave references, set during the draw loop, used for label Y positioning
+  const rowStaves: Array<{ treble: Stave; bass: Stave }> = []
   const measureBoxes: MeasureBox[] = []
 
   function buildVFNote(
@@ -260,15 +322,7 @@ export function renderSheet(
       const acc = getAccidental(note.name)
       if (acc) vfNote.addModifier(new Accidental(acc), 0)
       if (opts.showLabels) {
-        const ann = new Annotation(note.name.replace(/\d+$/, ''))
-        // Treble labels above (clear of upward stems), bass labels below (clear of downward stems)
-        ann.setVerticalJustification(
-          clef === 'treble'
-            ? AnnotationVerticalJustify.TOP
-            : AnnotationVerticalJustify.BOTTOM,
-        )
-        ann.setFontSize(10)
-        vfNote.addModifier(ann, 0)
+        pendingLabels.push({ vfNote, label: note.name.replace(/\d+$/, '') })
       }
       pendingRefs.push({ vfNote, id, hand, row, measureIndex: mi })
     }
@@ -280,14 +334,16 @@ export function renderSheet(
     bass: Stave,
     rightVF: StaveNote[],
     leftVF: StaveNote[],
+    mi: number,
   ) {
+    const { numerator, denominator } = timeSigForMeasure(mi)
+    const beamGroups = beamGroupsForMeasure(mi)
     const voices: Voice[] = []
     const beams: ReturnType<typeof Beam.generateBeams> = []
 
     let rightVoice: Voice | null = null
     if (rightVF.length > 0) {
-      beams.push(...Beam.generateBeams(rightVF, { groups: beamGroups }))
-      rightVoice = new Voice({ numBeats: beatsPerMeasure, beatValue: 4 })
+      rightVoice = new Voice({ numBeats: numerator, beatValue: denominator })
       rightVoice.setMode(VoiceMode.SOFT)
       rightVoice.addTickables(rightVF)
       voices.push(rightVoice)
@@ -295,8 +351,7 @@ export function renderSheet(
 
     let leftVoice: Voice | null = null
     if (leftVF.length > 0) {
-      beams.push(...Beam.generateBeams(leftVF, { groups: beamGroups }))
-      leftVoice = new Voice({ numBeats: beatsPerMeasure, beatValue: 4 })
+      leftVoice = new Voice({ numBeats: numerator, beatValue: denominator })
       leftVoice.setMode(VoiceMode.SOFT)
       leftVoice.addTickables(leftVF)
       voices.push(leftVoice)
@@ -307,6 +362,13 @@ export function renderSheet(
     // joinVoices aligns rests horizontally across both staves
     const formatWidth = treble.getNoteEndX() - treble.getNoteStartX()
     new Formatter().joinVoices(voices).format(voices, formatWidth)
+
+    // Generate beams AFTER joinVoices — joinVoices resets flag state on the
+    // first note of each beam group, so beaming before it leaves a spurious flag.
+    if (rightVF.length > 0)
+      beams.push(...Beam.generateBeams(rightVF, { groups: beamGroups }))
+    if (leftVF.length > 0)
+      beams.push(...Beam.generateBeams(leftVF, { groups: beamGroups }))
 
     if (rightVoice) rightVoice.draw(ctx, treble)
     if (leftVoice) leftVoice.draw(ctx, bass)
@@ -356,12 +418,15 @@ export function renderSheet(
       xCursor += staveW
 
       const treble = new Stave(x, trebleY, staveW)
-      addStaveModifiers(treble, 'treble', isFirstMeasure, isRowStart)
+      addStaveModifiers(treble, 'treble', isFirstMeasure, isRowStart, mi)
       treble.setContext(ctx).draw()
 
       const bass = new Stave(x, bassY, staveW)
-      addStaveModifiers(bass, 'bass', isFirstMeasure, isRowStart)
+      addStaveModifiers(bass, 'bass', isFirstMeasure, isRowStart, mi)
       bass.setContext(ctx).draw()
+
+      // Store one stave pair per row for label Y positioning
+      if (isRowStart) rowStaves[row] = { treble, bass }
 
       new StaveConnector(treble, bass)
         .setType(StaveConnector.type.SINGLE_RIGHT)
@@ -402,7 +467,7 @@ export function renderSheet(
         height: bottom - top,
       })
 
-      drawMeasureColumn(treble, bass, rightVF, leftVF)
+      drawMeasureColumn(treble, bass, rightVF, leftVF, mi)
     }
   }
 
@@ -414,6 +479,51 @@ export function renderSheet(
     const stemEl = vfNote.getStem()?.getSVGElement()
     if (stemEl) svgEls.push(stemEl)
     noteRefs.push({ id, hand, svgEls, row, measureIndex })
+  }
+
+  const svgEl = container.querySelector('svg')
+
+  // Draw note name labels positioned on the open side of the note (away from stem)
+  // and wire them into noteRefs so they highlight along with the note.
+  if (opts.showLabels && pendingLabels.length > 0 && svgEl) {
+    const refByNote = new Map(
+      pendingRefs.map((p, i) => [p.vfNote, noteRefs[i]]),
+    )
+
+    for (const { vfNote, label } of pendingLabels) {
+      const x = (vfNote.getNoteHeadBeginX() + vfNote.getNoteHeadEndX()) / 2
+      if (!x) continue
+      const stave = vfNote.getStave()
+      if (!stave) continue
+      // Label on the opposite side from the stem:
+      //   stem up (1)  → note head is low  → label below the note head
+      //   stem down (-1) → note head is high → label above the note head
+      // Clamped so it never intrudes into the staff body.
+      const stemDir = vfNote.getStemDirection()
+      const bounds = vfNote.getNoteHeadBounds()
+      const y =
+        stemDir >= 0
+          ? Math.max(bounds.yBottom + 24, stave.getBottomLineBottomY() + 12)
+          : Math.min(bounds.yTop - 12, stave.getTopLineTopY() - 6)
+
+      const text = document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'text',
+      )
+      text.setAttribute('x', String(x))
+      text.setAttribute('y', String(y))
+      text.setAttribute('text-anchor', 'middle')
+      text.setAttribute('font-size', '10')
+      text.setAttribute('font-family', 'Arial, sans-serif')
+      text.setAttribute('font-weight', 'normal')
+      text.setAttribute('fill', 'currentColor')
+      text.classList.add('vf-note-label')
+      text.textContent = label
+      svgEl.appendChild(text)
+
+      const ref = refByNote.get(vfNote)
+      if (ref) ref.svgEls.push(text)
+    }
   }
 
   return { noteRefs, measureBoxes }
@@ -450,7 +560,7 @@ export function getActiveInfo(
 
 export function recolorAll(container: HTMLElement, color: string): void {
   container
-    .querySelectorAll<SVGElement>('path, rect, text')
+    .querySelectorAll<SVGElement>('path, rect, text:not(.vf-note-label)')
     .forEach((el) => applyColor(el, color))
 }
 

@@ -22,7 +22,12 @@ export function MidiStatusBadge({ status, onClick }: MidiStatusBadgeProps) {
 
   switch (status) {
     case 'idle':
-      label = 'MIDI'
+      label = (
+        <span className="flex items-center gap-1.5">
+          <StatusDot color="rgb(156 163 175)" />
+          MIDI
+        </span>
+      )
       title = 'Click to connect a MIDI keyboard'
       break
     case 'requesting':
@@ -33,14 +38,19 @@ export function MidiStatusBadge({ status, onClick }: MidiStatusBadgeProps) {
       label = (
         <span className="flex items-center gap-1.5">
           <StatusDot color="oklch(0.6 0.2 145)" />
-          MIDI: connected
+          MIDI
         </span>
       )
       title = 'MIDI keyboard connected — click to toggle view'
       break
     case 'disconnected':
-      label = 'MIDI: no device'
-      title = 'No MIDI device detected — click to toggle view'
+      label = (
+        <span className="flex items-center gap-1.5">
+          <StatusDot color="rgb(156 163 175)" />
+          MIDI
+        </span>
+      )
+      title = 'No MIDI device detected — click to connect or retry'
       break
     case 'unsupported':
       label = 'MIDI: unsupported'

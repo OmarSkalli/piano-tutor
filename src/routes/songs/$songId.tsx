@@ -165,6 +165,7 @@ function SongView({ songId }: { songId: string }) {
   const data = getSongData(songId)
   const audioEngine = useAudioEngine()
   const midi = useMidiContext()
+  const { status: midiStatus, openModal } = midi
   const song = data?.song ?? EMPTY_SONG
   const [initialPreferences] = useState(() =>
     readSongViewPreferences(songId, getTotalMeasures(song)),
@@ -335,6 +336,7 @@ function SongView({ songId }: { songId: string }) {
         practiceStatus={practice.status}
         showLabels={showLabels}
         showPiano={showPiano}
+        midiStatus={midiStatus}
         onModeChange={handleModeChange}
         onPlay={playback.play}
         onPause={playback.pause}
@@ -347,6 +349,7 @@ function SongView({ songId }: { songId: string }) {
         onPracticeReset={practice.reset}
         onToggleLabels={() => setShowLabels((v) => !v)}
         onTogglePiano={() => setShowPiano((v) => !v)}
+        onMidiClick={openModal}
         getPositionMs={playback.getPositionMs}
       />
       <div className="flex-1 overflow-hidden">

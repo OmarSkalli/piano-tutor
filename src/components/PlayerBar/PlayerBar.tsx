@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, Gauge, Pause, Piano, Play, Scissors } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { MidiStatusBadge } from '@/components/MidiStatusBadge'
+import type { MidiStatus } from '@/hooks/useMidi'
 import { cn } from '@/lib/utils'
 
 export type AppMode = 'playback' | 'practice'
@@ -29,6 +31,7 @@ export interface PlayerBarProps {
   // Persistent toggles
   showLabels: boolean
   showPiano: boolean
+  midiStatus: MidiStatus
   // Callbacks
   onModeChange(mode: AppMode): void
   onPlay(): void
@@ -42,6 +45,7 @@ export interface PlayerBarProps {
   onPracticeReset(): void
   onToggleLabels(): void
   onTogglePiano(): void
+  onMidiClick(): void
   getPositionMs(): number
 }
 
@@ -227,6 +231,7 @@ export function PlayerBar({
   practiceStatus,
   showLabels,
   showPiano,
+  midiStatus,
   onModeChange,
   onPlay,
   onPause,
@@ -239,6 +244,7 @@ export function PlayerBar({
   onPracticeReset,
   onToggleLabels,
   onTogglePiano,
+  onMidiClick,
   getPositionMs,
 }: PlayerBarProps) {
   const scrubberRef = useRef<HTMLInputElement>(null)
@@ -281,8 +287,6 @@ export function PlayerBar({
         />
 
         <div className="flex-1" />
-
-        <Divider />
 
         {mode === 'playback' ? (
           <>
@@ -442,6 +446,10 @@ export function PlayerBar({
             <Piano className="h-4 w-4" />
           </Button>
         </div>
+
+        <Divider />
+
+        <MidiStatusBadge status={midiStatus} onClick={onMidiClick} />
       </div>
     </div>
   )

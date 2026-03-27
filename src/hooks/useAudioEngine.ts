@@ -46,7 +46,9 @@ export function useAudioEngine(): AudioEngine {
     // synchronously within the gesture (done here), but we also need to await
     // it before playing notes — so chain it into the prepare promise.
     console.log('[audio] resuming AudioContext (state:', ctx.state, ')')
-    const resumePromise = ctx.resume()
+    const resumePromise = ctx.resume().then(() => {
+      console.log('[audio] AudioContext resumed — state:', ctx.state)
+    })
 
     console.log('[audio] loading soundfont instrument')
     const promise = Promise.all([
@@ -63,6 +65,10 @@ export function useAudioEngine(): AudioEngine {
       })
       .catch((e) => {
         console.error('[audio] prepare error', e)
+        // Reset so the user can retry
+        preparePromiseRef.current = null
+        ctxRef.current = null
+        playerRef.current = null
         throw e
       })
 

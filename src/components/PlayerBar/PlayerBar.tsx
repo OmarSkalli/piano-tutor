@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 export interface PlayerBarProps {
   title: string
   isPlaying: boolean
+  isPreloading: boolean
   durationMs: number
   tempoRate: number
   showLabels: boolean
@@ -30,6 +31,7 @@ function fmt(ms: number): string {
 export function PlayerBar({
   title,
   isPlaying,
+  isPreloading,
   durationMs,
   tempoRate,
   showLabels,
@@ -91,13 +93,18 @@ export function PlayerBar({
             variant="outline"
             size="icon"
             className="h-7 w-7 shrink-0"
+            disabled={isPreloading}
             onMouseDown={isPlaying ? undefined : onPrepare}
             onTouchStart={isPlaying ? undefined : onPrepare}
             onClick={isPlaying ? onPause : onPlay}
-            aria-label={isPlaying ? 'Pause' : 'Play'}
+            aria-label={
+              isPlaying ? 'Pause' : isPreloading ? 'Loading…' : 'Play'
+            }
           >
             {isPlaying ? (
               <Pause className="h-3.5 w-3.5" />
+            ) : isPreloading ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
             ) : (
               <Play className="h-3.5 w-3.5" />
             )}

@@ -89,6 +89,7 @@ function SongView() {
       <PlayerBar
         title={meta.title}
         isPlaying={isPlaying}
+        isPreloading={audioEngine.isPreloading}
         durationMs={song.durationMs}
         tempoRate={tempoRate}
         positionMs={positionMs}

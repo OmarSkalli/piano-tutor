@@ -35,3 +35,14 @@ export interface LibraryEntry {
   id: string
   title: string
 }
+
+export interface SongMeta {
+  id: string
+  title: string
+  composer: string | null
+  keySignature: string
+  timeSignature: string
+  tempo: number
+  hands: { right: number; left: number }
+  source: string
+}

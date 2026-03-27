@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import Soundfont from 'soundfont-player'
 
 export interface AudioEngine {
@@ -45,6 +45,16 @@ export function useAudioEngine(): AudioEngine {
       duration: durationMs / 1000,
     })
   }
+
+  useEffect(() => {
+    return () => {
+      playerRef.current?.stop()
+      ctxRef.current?.close()
+      ctxRef.current = null
+      playerRef.current = null
+      preparePromiseRef.current = null
+    }
+  }, [])
 
   return { prepare, playNote }
 }

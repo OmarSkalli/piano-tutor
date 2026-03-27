@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AudioEngine } from './useAudioEngine'
 import type { Hand, Song } from '@/types'
 import { noteId } from '@/components/SheetMusic/utils'
@@ -192,6 +192,13 @@ export function usePlayback(
     },
     [getPositionMs, scheduleFrom],
   )
+
+  useEffect(() => {
+    return () => {
+      clearAll()
+      isPlayingRef.current = false
+    }
+  }, [clearAll])
 
   return {
     isPlaying,

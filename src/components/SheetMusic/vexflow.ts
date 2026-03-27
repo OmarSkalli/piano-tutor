@@ -47,7 +47,6 @@ const MARGIN_TOP = 48
 // Labels sit above treble / below bass (TOP/BOTTOM justify), so they don't
 // compress the inter-stave gap — GRAND_STAFF_GAP stays fixed regardless.
 const GRAND_STAFF_GAP = 44
-const SYSTEM_GAP = 32
 const SYSTEM_GAP_WITH_LABELS = 56
 
 // Standard rest positions for each clef (per engraving convention)
@@ -148,11 +147,12 @@ export function renderSheet(
       .reduce((s, m) => s + m.filter((n) => !n.isRest).length, 0),
   )
 
-  // Row heights: labels go above treble and below bass — only system gap grows
+  // Keep row spacing stable whether labels are visible or not so grand staffs
+  // do not jump closer together when note names are hidden.
   const trebleStaveH = 40
   const bassStaveH = 40
-  const systemGap = opts.showLabels ? SYSTEM_GAP_WITH_LABELS : SYSTEM_GAP
-  const rowHeight = trebleStaveH + GRAND_STAFF_GAP + bassStaveH + systemGap
+  const rowHeight =
+    trebleStaveH + GRAND_STAFF_GAP + bassStaveH + SYSTEM_GAP_WITH_LABELS
 
   // ── Pre-pass: measure the minimum width each measure needs ──────────────────
   // We build voices for each measure, ask the Formatter for the minimum note-area

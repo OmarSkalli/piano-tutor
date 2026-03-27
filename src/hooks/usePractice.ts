@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { noteId } from '@/components/SheetMusic/utils'
 import type { Hand, Song } from '@/types'
-import type { MidiState } from './useMidi'
 
 export interface PracticeState {
   status: 'idle' | 'waiting' | 'done'
@@ -56,7 +55,10 @@ function buildChords(song: Song): Chord[] {
   }))
 }
 
-export function usePractice(song: Song, midi: MidiState): PracticeState {
+export function usePractice(
+  song: Song,
+  activeNotes: Set<string>,
+): PracticeState {
   const [status, setStatus] = useState<'idle' | 'waiting' | 'done'>('idle')
   const [activeNoteIds, setActiveNoteIds] = useState<Set<string>>(new Set())
   const [activeNoteNames, setActiveNoteNames] = useState<Map<string, Hand>>(
@@ -101,14 +103,14 @@ export function usePractice(song: Song, midi: MidiState): PracticeState {
     if (statusRef.current !== 'waiting') return
     const chord = chords[chordIndexRef.current]
     if (!chord) return
-    const allPressed = chord.notes.every((n) => midi.activeNotes.has(n.name))
+    const allPressed = chord.notes.every((n) => activeNotes.has(n.name))
     if (!allPressed || advanceQueuedRef.current) return
     advanceQueuedRef.current = true
     queueMicrotask(() => {
       advanceQueuedRef.current = false
       if (statusRef.current === 'waiting') advance()
     })
-  }, [midi.activeNotes, chords, advance])
+  }, [activeNotes, chords, advance])
 
   const start = useCallback(() => {
     if (chords.length === 0) return

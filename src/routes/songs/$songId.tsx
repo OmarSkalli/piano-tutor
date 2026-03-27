@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { PianoKeyboard } from '@/components/PianoKeyboard'
 import {
@@ -16,6 +16,7 @@ import type { Song, SongMeta } from '@/types'
 
 const SONGS_DIR = '../../songs'
 const SONG_PREFERENCES_STORAGE_KEY = 'piano-tutor:song-prefs:v1'
+const VIRTUAL_PRACTICE_NOTE_MS = 250
 
 const songDataMap = import.meta.glob<Song>('../../songs/*/song.json', {
   eager: true,
@@ -186,6 +187,12 @@ function SongView({ songId }: { songId: string }) {
   const [cropRange, setCropRange] = useState<CropRange | null>(
     initialPreferences.cropRange,
   )
+  const [virtualActiveNotes, setVirtualActiveNotes] = useState<Set<string>>(
+    new Set(),
+  )
+  const virtualNoteTimeoutsRef = useRef<
+    Map<string, ReturnType<typeof setTimeout>>
+  >(new Map())
 
   // Total measure count (1-based, for the crop UI)
   const totalMeasures = useMemo(() => getTotalMeasures(song), [song])
@@ -199,6 +206,16 @@ function SongView({ songId }: { songId: string }) {
       showPiano,
     })
   }, [songId, data, activeHand, cropRange, showLabels, showPiano])
+
+  useEffect(() => {
+    const virtualNoteTimeouts = virtualNoteTimeoutsRef.current
+    return () => {
+      for (const timeout of virtualNoteTimeouts.values()) {
+        clearTimeout(timeout)
+      }
+      virtualNoteTimeouts.clear()
+    }
+  }, [])
 
   const croppedSong = useMemo((): Song => {
     if (cropRange === null) return song
@@ -251,7 +268,14 @@ function SongView({ songId }: { songId: string }) {
   const sheetSong = croppedSong
 
   const playback = usePlayback(filteredSong, audioEngine)
-  const practice = usePractice(filteredSong, midi)
+  const practiceActiveNotes = useMemo(() => {
+    const next = new Set(midi.activeNotes)
+    for (const note of virtualActiveNotes) {
+      next.add(note)
+    }
+    return next
+  }, [midi.activeNotes, virtualActiveNotes])
+  const practice = usePractice(filteredSong, practiceActiveNotes)
   const isPracticeMode = mode === 'practice'
 
   const activeNoteIds = isPracticeMode
@@ -271,6 +295,19 @@ function SongView({ songId }: { songId: string }) {
 
   const handlePianoKeyPress = useCallback(
     async (note: string) => {
+      setVirtualActiveNotes((prev) => new Set(prev).add(note))
+      const existingTimeout = virtualNoteTimeoutsRef.current.get(note)
+      if (existingTimeout) clearTimeout(existingTimeout)
+      const timeout = setTimeout(() => {
+        virtualNoteTimeoutsRef.current.delete(note)
+        setVirtualActiveNotes((prev) => {
+          const next = new Set(prev)
+          next.delete(note)
+          return next
+        })
+      }, VIRTUAL_PRACTICE_NOTE_MS)
+      virtualNoteTimeoutsRef.current.set(note, timeout)
+
       await audioEngine.prepare()
       audioEngine.playNote(note, 1200, 96)
     },
@@ -299,18 +336,21 @@ function SongView({ songId }: { songId: string }) {
   function handleModeChange(m: AppMode) {
     if (playback.isPlaying) playback.pause()
     practice.reset()
+    setVirtualActiveNotes(new Set())
     setMode(m)
   }
 
   function handleActiveHandChange(hand: ActiveHand) {
     setSelectedMeasure(null)
     practice.reset()
+    setVirtualActiveNotes(new Set())
     setActiveHand(hand)
   }
 
   function handleCropRangeChange(range: CropRange | null) {
     setSelectedMeasure(null)
     practice.reset()
+    setVirtualActiveNotes(new Set())
     setCropRange(range)
   }
 

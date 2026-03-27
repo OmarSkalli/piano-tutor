@@ -361,8 +361,8 @@ export function PlayerBar({
               <input
                 type="range"
                 min={25}
-                max={200}
-                step={5}
+                max={150}
+                step={25}
                 value={Math.round(tempoRate * 100)}
                 onChange={(e) => onSetTempoRate(Number(e.target.value) / 100)}
                 className="w-16 cursor-pointer accent-indigo-500"

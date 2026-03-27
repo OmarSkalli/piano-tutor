@@ -193,7 +193,7 @@ export function usePlayback(
 
   const setTempoRate = useCallback(
     (rate: number) => {
-      const clamped = Math.max(0.25, Math.min(2, rate))
+      const clamped = Math.max(0.25, Math.min(1.5, rate))
       tempoRateRef.current = clamped
       setTempoRateState(clamped)
       if (isPlayingRef.current) {

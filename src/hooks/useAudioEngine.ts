@@ -89,6 +89,16 @@ export function useAudioEngine(): AudioEngine {
     )
     if (!ctx || !player) return
 
+    // Sanity-check: play a brief oscillator beep to confirm AudioContext output works
+    // TODO: remove after debugging
+    const osc = ctx.createOscillator()
+    const g = ctx.createGain()
+    g.gain.value = 0.1
+    osc.connect(g)
+    g.connect(ctx.destination)
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.1)
+
     player.play(noteName, ctx.currentTime, {
       gain: velocity / 127,
       duration: durationMs / 1000,

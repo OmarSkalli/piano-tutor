@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { Song } from '@/types'
 import {
+  getActiveInfo,
   highlightNotes,
   recolorAll,
   renderSheet,
+  type MeasureBox,
   type NoteRef,
 } from './vexflow'
 
@@ -11,63 +13,139 @@ export interface SheetMusicProps {
   song: Song
   activeNoteIds: Set<string>
   showLabels: boolean
-  /** Playback progress 0–1; drives horizontal scroll to keep active note at ~28% from left */
-  playbackProgress: number
+  /** Raw key signature string from metadata e.g. "G major", "E minor" */
+  keySignature?: string | null
+}
+
+/** Convert "G major" → "G", "E minor" → "Em", "F# minor" → "F#m", etc. */
+function toVFKeySpec(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined
+  const m = raw.match(/^([A-G][#b]?)\s*(major|minor)$/i)
+  if (!m) return undefined
+  const root = m[1]
+  const isMinor = m[2].toLowerCase() === 'minor'
+  return isMinor ? `${root}m` : root
 }
 
 export function SheetMusic({
   song,
   activeNoteIds,
   showLabels,
-  playbackProgress,
+  keySignature,
 }: SheetMusicProps) {
   const outerRef = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const pageRef = useRef<HTMLDivElement>(null)
   const noteRefsRef = useRef<NoteRef[]>([])
-  const [sheetDimensions, setSheetDimensions] = useState({
-    sheetWidth: 0,
-    viewportWidth: 0,
-  })
+  const measureBoxesRef = useRef<MeasureBox[]>([])
+  // First measureBox per row — used for scroll targeting
+  const rowBoxesRef = useRef<Map<number, MeasureBox>>(new Map())
+  const highlightRectRef = useRef<SVGRectElement | null>(null)
+  const lastScrolledRowRef = useRef(-1)
 
-  // Re-render sheet when song or label toggle changes; capture dimensions after draw
+  // Re-render sheet when song or label toggle changes
   useEffect(() => {
-    if (!containerRef.current || !outerRef.current) return
-    const refs = renderSheet(containerRef.current, song, { showLabels })
-    noteRefsRef.current = refs
-    recolorAll(containerRef.current, 'currentColor')
-    setSheetDimensions({
-      sheetWidth: containerRef.current.scrollWidth,
-      viewportWidth: outerRef.current.clientWidth,
+    if (!pageRef.current || !outerRef.current) return
+    lastScrolledRowRef.current = -1
+
+    const { noteRefs, measureBoxes } = renderSheet(pageRef.current, song, {
+      showLabels,
+      width: pageRef.current.clientWidth,
+      keySignature: toVFKeySpec(keySignature),
     })
+    noteRefsRef.current = noteRefs
+    measureBoxesRef.current = measureBoxes
+
+    // Index the first measureBox for each row for O(1) scroll targeting
+    const rowBoxes = new Map<number, MeasureBox>()
+    for (const ref of noteRefs) {
+      if (!rowBoxes.has(ref.row)) {
+        const box = measureBoxes.find(
+          (b) => b.measureIndex === ref.measureIndex,
+        )
+        if (box) rowBoxes.set(ref.row, box)
+      }
+    }
+    rowBoxesRef.current = rowBoxes
+
+    recolorAll(pageRef.current, 'currentColor')
+
+    // Create a persistent highlight rect in the SVG (inserted behind all notation)
+    const svg = pageRef.current.querySelector('svg')
+    highlightRectRef.current = null
+    if (svg) {
+      const rect = document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'rect',
+      )
+      rect.setAttribute('rx', '4')
+      rect.style.fill = 'var(--color-measure-highlight, rgba(99,102,241,0.08))'
+      rect.style.stroke = 'none'
+      rect.style.display = 'none'
+      rect.style.pointerEvents = 'none'
+      svg.insertBefore(rect, svg.firstChild)
+      highlightRectRef.current = rect
+    }
   }, [song, showLabels])
 
-  // Highlight active notes directly in DOM — no React re-render
+  // Highlight active notes and update measure highlight rect
   useEffect(() => {
+    const refs = noteRefsRef.current
     highlightNotes(
-      noteRefsRef.current,
+      refs,
       activeNoteIds,
       'var(--color-hand-right)',
       'var(--color-hand-left)',
       'currentColor',
     )
+
+    const info = getActiveInfo(refs, activeNoteIds)
+    const rect = highlightRectRef.current
+
+    if (!info || !rect) {
+      if (rect) rect.style.display = 'none'
+      return
+    }
+
+    const box = measureBoxesRef.current.find(
+      (b) => b.measureIndex === info.measureIndex,
+    )
+    if (box) {
+      rect.setAttribute('x', String(box.x))
+      rect.setAttribute('y', String(box.y))
+      rect.setAttribute('width', String(box.width))
+      rect.setAttribute('height', String(box.height))
+      rect.style.display = 'block'
+    }
+
+    if (info.row !== lastScrolledRowRef.current) {
+      lastScrolledRowRef.current = info.row
+      const outer = outerRef.current
+      const page = pageRef.current
+      const rowBox = rowBoxesRef.current.get(info.row)
+      if (outer && page && rowBox) {
+        // rowBox.y is in SVG/page space; scroll so the active row lands at ~60%
+        // down the viewport, keeping the previous row visible above it.
+        const pageTop =
+          page.getBoundingClientRect().top +
+          outer.scrollTop -
+          outer.getBoundingClientRect().top
+        const targetScrollY = pageTop + rowBox.y - outer.clientHeight * 0.4
+        outer.scrollTo({ top: targetScrollY, behavior: 'smooth' })
+      }
+    }
   }, [activeNoteIds])
 
-  // Active note stays at ~28% from left as sheet scrolls
-  const maxScroll = Math.max(
-    0,
-    sheetDimensions.sheetWidth - sheetDimensions.viewportWidth * 0.72,
-  )
-  const scrollOffset = playbackProgress * maxScroll
-
   return (
-    <div ref={outerRef} className="h-full overflow-hidden">
-      <div
-        ref={containerRef}
-        style={{
-          transform: `translateX(-${scrollOffset}px)`,
-          transition: 'transform 0.1s linear',
-        }}
-      />
+    <div
+      ref={outerRef}
+      className="h-full overflow-y-auto bg-gray-100 dark:bg-zinc-800"
+    >
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        <div
+          ref={pageRef}
+          className="rounded-sm bg-white shadow-md ring-1 ring-black/5 dark:bg-zinc-50"
+        />
+      </div>
     </div>
   )
 }

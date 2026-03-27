@@ -35,33 +35,17 @@ export function getAccidental(noteName: string): string | null {
   return null
 }
 
-const BEAT_MAP: Record<NoteDuration, number> = {
-  whole: 4,
-  half: 2,
-  quarter: 1,
-  eighth: 0.5,
-  sixteenth: 0.25,
-  'thirty-second': 0.125,
-}
-
-// Groups notes into measures based on cumulative beat count
-export function groupMeasures(notes: Note[], beatsPerMeasure = 4): Note[][] {
-  const measures: Note[][] = []
-  let current: Note[] = []
-  let beats = 0
-
+/**
+ * Groups pre-processed notes (including rests) into measures by their
+ * measureIndex field. Returns a sparse-safe array indexed from 0.
+ */
+export function groupMeasures(notes: Note[]): Note[][] {
+  if (notes.length === 0) return []
+  const maxMeasure = notes.reduce((m, n) => Math.max(m, n.measureIndex), 0)
+  const measures: Note[][] = Array.from({ length: maxMeasure + 1 }, () => [])
   for (const note of notes) {
-    const noteBeat = BEAT_MAP[note.noteDuration] ?? 1
-    if (beats > 0 && beats + noteBeat > beatsPerMeasure + 0.001) {
-      measures.push(current)
-      current = []
-      beats = 0
-    }
-    current.push(note)
-    beats += noteBeat
+    measures[note.measureIndex].push(note)
   }
-
-  if (current.length > 0) measures.push(current)
   return measures
 }
 

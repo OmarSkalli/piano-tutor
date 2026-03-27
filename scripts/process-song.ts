@@ -3,8 +3,7 @@ const { Midi } = midiLib as unknown as typeof import('@tonejs/midi')
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import { quantizeNoteDuration } from '../src/lib/music'
-import type { Hand, Note, Track } from '../src/types'
+import type { Hand, Note, NoteDuration, Track } from '../src/types'
 
 const inputPath = process.argv[2]
 
@@ -62,6 +61,64 @@ function ticksToMs(tick: number): number {
   return Math.round(ms)
 }
 
+const timeSignature = midi.header.timeSignatures[0]
+  ? {
+      numerator: midi.header.timeSignatures[0].timeSignature[0],
+      denominator: midi.header.timeSignatures[0].timeSignature[1],
+    }
+  : { numerator: 4, denominator: 4 }
+
+const ticksPerMeasure = ticksPerQuarter * timeSignature.numerator
+
+// Snap a tick to the nearest subdivision (32nd note = ticksPerQuarter/8)
+const SNAP = ticksPerQuarter / 8
+function snap(tick: number): number {
+  return Math.round(tick / SNAP) * SNAP
+}
+
+// Ordered largest→smallest for greedy rest decomposition
+const REST_DURATIONS: { name: NoteDuration; ticks: number }[] = [
+  { name: 'whole', ticks: ticksPerQuarter * 4 },
+  { name: 'half', ticks: ticksPerQuarter * 2 },
+  { name: 'quarter', ticks: ticksPerQuarter },
+  { name: 'eighth', ticks: ticksPerQuarter / 2 },
+  { name: 'sixteenth', ticks: ticksPerQuarter / 4 },
+  { name: 'thirty-second', ticks: ticksPerQuarter / 8 },
+]
+
+function ticksToNoteDuration(ticks: number): NoteDuration {
+  return REST_DURATIONS.reduce((best, d) =>
+    Math.abs(d.ticks - ticks) < Math.abs(best.ticks - ticks) ? d : best,
+  ).name
+}
+
+/** Decompose a tick gap into the fewest rests using greedy largest-first. */
+function fillRests(startTick: number, gapTicks: number): Note[] {
+  const rests: Note[] = []
+  let remaining = gapTicks
+  let cursor = startTick
+
+  for (const { name, ticks } of REST_DURATIONS) {
+    while (remaining >= ticks - SNAP / 2) {
+      const startMs = ticksToMs(cursor)
+      const measureIndex = Math.floor(cursor / ticksPerMeasure)
+      const beatInMeasure = (cursor % ticksPerMeasure) / ticksPerQuarter
+      rests.push({
+        name: 'rest',
+        startMs,
+        durationMs: ticksToMs(cursor + ticks) - startMs,
+        noteDuration: name,
+        measureIndex,
+        beatInMeasure,
+        isRest: true,
+      })
+      cursor += ticks
+      remaining -= ticks
+    }
+  }
+  return rests
+}
+
 function assignHands(trackCount: number): Hand[] {
   if (trackCount === 2) return ['right', 'left']
   if (trackCount === 1) return ['unknown']
@@ -74,21 +131,62 @@ const hands = assignHands(midi.tracks.length)
 const usePitchSplit = midi.tracks.length === 1
 
 const tracks: Track[] = midi.tracks.map((track, i) => {
-  const notes: Note[] = track.notes.map((note) => ({
-    midi: note.midi,
-    name: note.name,
-    velocity: Math.round(note.velocity * 100) / 100,
-    startMs: ticksToMs(note.ticks),
-    durationMs:
-      ticksToMs(note.ticks + note.durationTicks) - ticksToMs(note.ticks),
-    noteDuration: quantizeNoteDuration(note.durationTicks, ticksPerQuarter),
-  }))
   const hand: Hand = usePitchSplit ? 'unknown' : (hands[i] ?? 'unknown')
+
+  // Sort notes by start tick (MIDI tracks are usually sorted, but be safe)
+  const midiNotes = [...track.notes].sort((a, b) => a.ticks - b.ticks)
+
+  const notes: Note[] = []
+
+  // We detect rests from gaps between consecutive note *start* ticks, not
+  // start+duration, because MIDI note durations often slightly underrun/overrun
+  // the grid. The rhythmic intent is encoded in the start positions.
+  let cursor = 0 // tracks the next expected note start in ticks
+
+  for (const midiNote of midiNotes) {
+    const startTick = snap(midiNote.ticks)
+    const durationTicks = snap(midiNote.durationTicks) || SNAP
+
+    // Fill gap between cursor and this note with rests
+    if (startTick > cursor + SNAP / 2) {
+      notes.push(...fillRests(cursor, startTick - cursor))
+    }
+
+    const measureIndex = Math.floor(startTick / ticksPerMeasure)
+    const beatInMeasure = (startTick % ticksPerMeasure) / ticksPerQuarter
+    const startMs = ticksToMs(startTick)
+    notes.push({
+      midi: midiNote.midi,
+      name: midiNote.name,
+      velocity: Math.round(midiNote.velocity * 100) / 100,
+      startMs,
+      durationMs: ticksToMs(startTick + durationTicks) - startMs,
+      noteDuration: ticksToNoteDuration(durationTicks),
+      measureIndex,
+      beatInMeasure,
+      isRest: false,
+    })
+
+    // Advance cursor using the quantized (notated) duration, not the raw MIDI
+    // duration — the raw duration is legato/performance timing and overshoots
+    const notatedTicks = REST_DURATIONS.find(
+      (d) => d.name === ticksToNoteDuration(durationTicks),
+    )!.ticks
+    cursor = startTick + notatedTicks
+  }
+
+  // Fill remainder of the final measure so it sums to beatsPerMeasure
+  const endOfMeasure = Math.ceil(cursor / ticksPerMeasure) * ticksPerMeasure
+  if (endOfMeasure > cursor + SNAP / 2) {
+    notes.push(...fillRests(cursor, endOfMeasure - cursor))
+  }
+
   return { hand, notes }
 })
 
 const lastNote = tracks
   .flatMap((t) => t.notes)
+  .filter((n) => !n.isRest)
   .reduce((max, n) => Math.max(max, n.startMs + n.durationMs), 0)
 
 const songJson = {
@@ -96,12 +194,7 @@ const songJson = {
   ticksPerQuarter,
   durationMs: lastNote,
   tempoChanges: tempoMap.map(({ tick, bpm }) => ({ tick, bpm })),
-  timeSignature: midi.header.timeSignatures[0]
-    ? {
-        numerator: midi.header.timeSignatures[0].timeSignature[0],
-        denominator: midi.header.timeSignatures[0].timeSignature[1],
-      }
-    : { numerator: 4, denominator: 4 },
+  timeSignature,
   tracks,
 }
 
@@ -119,7 +212,7 @@ if (!isRerun) {
   const keySignature = keyEvent ? `${keyEvent.key} ${keyEvent.scale}` : null
 
   const timeSig = midi.header.timeSignatures[0]
-  const timeSignature = timeSig
+  const timeSignatureStr = timeSig
     ? `${timeSig.timeSignature[0]}/${timeSig.timeSignature[1]}`
     : null
 
@@ -128,7 +221,7 @@ if (!isRerun) {
     title,
     composer: null as string | null,
     keySignature,
-    timeSignature,
+    timeSignature: timeSignatureStr,
     tempo: tempoMap[0]?.bpm ?? null,
     hands: midi.tracks.length >= 2 ? { right: 0, left: 1 } : null,
     source: path.basename(inputPath),
@@ -165,12 +258,13 @@ if (existingIndex >= 0) {
 fs.writeFileSync(libraryPath, JSON.stringify(library, null, 2))
 
 // Summary
-const totalNotes = tracks.reduce((sum, t) => sum + t.notes.length, 0)
+const realNotes = tracks.flatMap((t) => t.notes).filter((n) => !n.isRest)
+const restNotes = tracks.flatMap((t) => t.notes).filter((n) => n.isRest)
 const durationSec = (lastNote / 1000).toFixed(1)
 
 console.log(`\nID:     ${id}`)
 console.log(`Tracks: ${midi.tracks.length}`)
-console.log(`Notes:  ${totalNotes}`)
+console.log(`Notes:  ${realNotes.length} real + ${restNotes.length} rests`)
 console.log(`Length: ${durationSec}s`)
 console.log(`metadata.json: ${isRerun ? 'preserved (re-run)' : 'written'}`)
 console.log(`\nWritten to ${outputDir}/`)

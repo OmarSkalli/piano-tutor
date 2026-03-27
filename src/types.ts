@@ -7,12 +7,17 @@ export type NoteDuration =
   | 'thirty-second'
 
 export interface Note {
-  midi: number
+  /** Absent on rests */
+  midi?: number
   name: string
-  velocity: number
+  /** Absent on rests */
+  velocity?: number
   startMs: number
   durationMs: number
   noteDuration: NoteDuration
+  measureIndex: number
+  beatInMeasure: number
+  isRest: boolean
 }
 
 export type Hand = 'right' | 'left' | 'unknown'

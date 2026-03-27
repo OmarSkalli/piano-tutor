@@ -66,6 +66,12 @@ export function usePlayback(
             setActiveNoteIds((prev) => new Set([...prev, id]))
             setActiveNoteNames((prev) => new Map(prev).set(noteName, hand))
 
+            // Use the gap to the next note's startMs as the highlight duration
+            // so staccato notes don't flash off immediately.
+            const nextNote = track.notes.slice(ni + 1).find((n) => !n.isRest)
+            const highlightDuration = nextNote
+              ? nextNote.startMs - note.startMs
+              : note.durationMs
             const offT = setTimeout(() => {
               setActiveNoteIds((prev) => {
                 const next = new Set(prev)
@@ -77,7 +83,7 @@ export function usePlayback(
                 next.delete(noteName)
                 return next
               })
-            }, note.durationMs)
+            }, highlightDuration)
 
             timeoutsRef.current.push(offT)
           },

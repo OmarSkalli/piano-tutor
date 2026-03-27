@@ -471,14 +471,17 @@ export function renderSheet(
     }
   }
 
+  // Build noteRefs and a vfNote→NoteRef map in one pass so indices stay in sync.
   const noteRefs: NoteRef[] = []
+
   for (const { vfNote, id, hand, row, measureIndex } of pendingRefs) {
     const svgEl = vfNote.getSVGElement()
     if (!svgEl) continue
     const svgEls: Element[] = [svgEl]
     const stemEl = vfNote.getStem()?.getSVGElement()
     if (stemEl) svgEls.push(stemEl)
-    noteRefs.push({ id, hand, svgEls, row, measureIndex })
+    const ref: NoteRef = { id, hand, svgEls, row, measureIndex }
+    noteRefs.push(ref)
   }
 
   const svgEl = container.querySelector('svg')
@@ -486,19 +489,11 @@ export function renderSheet(
   // Draw note name labels positioned on the open side of the note (away from stem)
   // and wire them into noteRefs so they highlight along with the note.
   if (opts.showLabels && pendingLabels.length > 0 && svgEl) {
-    const refByNote = new Map(
-      pendingRefs.map((p, i) => [p.vfNote, noteRefs[i]]),
-    )
-
     for (const { vfNote, label } of pendingLabels) {
       const x = (vfNote.getNoteHeadBeginX() + vfNote.getNoteHeadEndX()) / 2
       if (!x) continue
       const stave = vfNote.getStave()
       if (!stave) continue
-      // Label on the opposite side from the stem:
-      //   stem up (1)  → note head is low  → label below the note head
-      //   stem down (-1) → note head is high → label above the note head
-      // Clamped so it never intrudes into the staff body.
       const stemDir = vfNote.getStemDirection()
       const bounds = vfNote.getNoteHeadBounds()
       const y =
@@ -516,13 +511,9 @@ export function renderSheet(
       text.setAttribute('font-size', '10')
       text.setAttribute('font-family', 'Arial, sans-serif')
       text.setAttribute('font-weight', 'normal')
-      text.setAttribute('fill', 'currentColor')
       text.classList.add('vf-note-label')
       text.textContent = label
       svgEl.appendChild(text)
-
-      const ref = refByNote.get(vfNote)
-      if (ref) ref.svgEls.push(text)
     }
   }
 
@@ -542,7 +533,13 @@ export function highlightNotes(
         ? rightColor
         : leftColor
       : defaultColor
-    ref.svgEls.forEach((el) => colorElement(el, color))
+    ref.svgEls.forEach((el) => {
+      if (el.classList.contains('vf-note-label')) {
+        // skip — label color is static
+      } else {
+        colorElement(el, color)
+      }
+    })
   }
 }
 

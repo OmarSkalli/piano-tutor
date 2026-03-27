@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { PianoKeyboard } from '@/components/PianoKeyboard'
 import { PlayerBar } from '@/components/PlayerBar'
@@ -46,6 +46,31 @@ function SongView() {
   const [showLabels, setShowLabels] = useState(true)
   const [showPiano, setShowPiano] = useState(true)
   const [selectedMeasure, setSelectedMeasure] = useState<number | null>(null)
+  const [debugLogs, setDebugLogs] = useState<string[]>([])
+  const origConsole = useRef({ log: console.log, error: console.error })
+
+  useEffect(() => {
+    const { log, error } = origConsole.current
+    const push = (prefix: string, args: unknown[]) => {
+      const msg = args
+        .map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a)))
+        .join(' ')
+      if (msg.includes('[audio]'))
+        setDebugLogs((prev) => [...prev.slice(-19), `${prefix}${msg}`])
+    }
+    console.log = (...args) => {
+      log(...args)
+      push('', args)
+    }
+    console.error = (...args) => {
+      error(...args)
+      push('ERR ', args)
+    }
+    return () => {
+      console.log = log
+      console.error = error
+    }
+  }, [])
   const {
     isPlaying,
     tempoRate,
@@ -117,6 +142,13 @@ function SongView() {
       {showPiano && (
         <div className="shrink-0">
           <PianoKeyboard highlightedNotes={highlightedNotes} />
+        </div>
+      )}
+      {debugLogs.length > 0 && (
+        <div className="max-h-32 shrink-0 overflow-y-auto bg-black/80 px-2 py-1 font-mono text-xs text-green-400">
+          {debugLogs.map((l, i) => (
+            <div key={i}>{l}</div>
+          ))}
         </div>
       )}
     </main>

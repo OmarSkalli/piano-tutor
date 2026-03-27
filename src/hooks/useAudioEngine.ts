@@ -20,14 +20,23 @@ export function useAudioEngine(): AudioEngine {
 
   // Fetch the soundfont into the browser HTTP cache on mount so prepare() is fast
   useEffect(() => {
-    fetch(SOUNDFONT_URL).finally(() => setIsPreloading(false))
+    console.log('[audio] preload fetch start')
+    fetch(SOUNDFONT_URL)
+      .then((r) => console.log('[audio] preload fetch done', r.status))
+      .catch((e) => console.error('[audio] preload fetch error', e))
+      .finally(() => setIsPreloading(false))
   }, [])
 
   function prepare(): Promise<void> {
-    if (preparePromiseRef.current) return preparePromiseRef.current
+    if (preparePromiseRef.current) {
+      console.log('[audio] prepare: already in progress / done')
+      return preparePromiseRef.current
+    }
 
+    console.log('[audio] prepare: creating AudioContext')
     const ctx = new AudioContext()
     ctxRef.current = ctx
+    console.log('[audio] AudioContext state:', ctx.state)
     const gain = ctx.createGain()
     gain.gain.value = 0.7
     gain.connect(ctx.destination)
@@ -36,15 +45,29 @@ export function useAudioEngine(): AudioEngine {
     // iOS creates AudioContext in 'suspended' state. Call resume() synchronously
     // here (within the user gesture) to unlock it — the promise resolving async
     // is fine, but the *call* must happen in the gesture handler stack.
-    if (ctx.state === 'suspended') ctx.resume()
+    if (ctx.state === 'suspended') {
+      console.log('[audio] resuming suspended AudioContext')
+      ctx
+        .resume()
+        .then(() =>
+          console.log('[audio] AudioContext resumed, state:', ctx.state),
+        )
+    }
 
+    console.log('[audio] loading soundfont instrument')
     const promise = Soundfont.instrument(ctx, 'acoustic_grand_piano', {
       format: 'mp3',
       soundfont: 'MusyngKite',
       nameToUrl: () => SOUNDFONT_URL,
-    }).then((player) => {
-      playerRef.current = player
     })
+      .then((player) => {
+        console.log('[audio] soundfont loaded, ctx state:', ctx.state)
+        playerRef.current = player
+      })
+      .catch((e) => {
+        console.error('[audio] soundfont load error', e)
+        throw e
+      })
 
     preparePromiseRef.current = promise
     return promise
@@ -53,6 +76,14 @@ export function useAudioEngine(): AudioEngine {
   function playNote(noteName: string, durationMs: number, velocity = 80) {
     const ctx = ctxRef.current
     const player = playerRef.current
+    console.log(
+      '[audio] playNote',
+      noteName,
+      'ctx:',
+      ctx?.state,
+      'player:',
+      !!player,
+    )
     if (!ctx || !player) return
 
     player.play(noteName, ctx.currentTime, {

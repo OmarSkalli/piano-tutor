@@ -15,9 +15,10 @@ Catalogue of all product specifications.
 
 ## Planned Specs
 
-| Title                           | Status     | Owner       | Updated    | Summary                                                         |
-| ------------------------------- | ---------- | ----------- | ---------- | --------------------------------------------------------------- |
-| [Song Library](song-library.md) | 📋 Planned | Omar Skalli | 2026-03-26 | Alphabetical list of songs; clicking a song opens its Song View |
+| Title                           | Status     | Owner       | Updated    | Summary                                                                                |
+| ------------------------------- | ---------- | ----------- | ---------- | -------------------------------------------------------------------------------------- |
+| [Song Library](song-library.md) | 📋 Planned | Omar Skalli | 2026-03-26 | Alphabetical list of songs; clicking a song opens its Song View                        |
+| [Song View](song-view.md)       | 📋 Planned | Omar Skalli | 2026-03-26 | Sheet music + synchronized keyboard highlighting with audio playback for a single song |
 
 ## Status Legend
 

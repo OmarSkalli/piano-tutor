@@ -92,16 +92,17 @@ export function SheetMusic({
     }
   }, [song, showLabels])
 
-  // Measure click → seek
+  // Measure click/tap → seek
   useEffect(() => {
     const page = pageRef.current
     if (!page || !onMeasureClick) return
-    function handler(e: MouseEvent) {
+
+    function hitTest(clientX: number, clientY: number) {
       const svg = page!.querySelector('svg') as SVGSVGElement | null
       if (!svg) return
       const pt = svg.createSVGPoint()
-      pt.x = e.clientX
-      pt.y = e.clientY
+      pt.x = clientX
+      pt.y = clientY
       const ctm = svg.getScreenCTM()
       if (!ctm) return
       const svgPt = pt.matrixTransform(ctm.inverse())
@@ -114,8 +115,22 @@ export function SheetMusic({
       )
       if (box) onMeasureClick!(box.measureIndex)
     }
-    page.addEventListener('click', handler)
-    return () => page.removeEventListener('click', handler)
+
+    function handleClick(e: MouseEvent) {
+      hitTest(e.clientX, e.clientY)
+    }
+
+    function handleTouchEnd(e: TouchEvent) {
+      const touch = e.changedTouches[0]
+      if (touch) hitTest(touch.clientX, touch.clientY)
+    }
+
+    page.addEventListener('click', handleClick)
+    page.addEventListener('touchend', handleTouchEnd)
+    return () => {
+      page.removeEventListener('click', handleClick)
+      page.removeEventListener('touchend', handleTouchEnd)
+    }
   }, [song, showLabels, onMeasureClick])
 
   // Highlight active notes and update measure highlight rect

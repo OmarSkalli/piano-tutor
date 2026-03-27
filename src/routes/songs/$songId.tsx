@@ -44,6 +44,7 @@ function SongView() {
   const data = getSongData(songId)
   const audioEngine = useAudioEngine()
   const [showLabels, setShowLabels] = useState(true)
+  const [showPiano, setShowPiano] = useState(true)
   const [selectedMeasure, setSelectedMeasure] = useState<number | null>(null)
   const {
     isPlaying,
@@ -85,21 +86,21 @@ function SongView() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden">
-      <header className="flex items-center px-6 py-4">
-        <h1 className="text-xl font-semibold">{meta.title}</h1>
-      </header>
       <PlayerBar
+        title={meta.title}
         isPlaying={isPlaying}
         durationMs={song.durationMs}
         tempoRate={tempoRate}
         positionMs={positionMs}
         showLabels={showLabels}
+        showPiano={showPiano}
         onPlay={play}
         onPause={pause}
         onPrepare={audioEngine.prepare}
         onSeek={seek}
         onSetTempoRate={setTempoRate}
         onToggleLabels={() => setShowLabels((v) => !v)}
+        onTogglePiano={() => setShowPiano((v) => !v)}
         getPositionMs={getPositionMs}
       />
       <div className="flex-1 overflow-hidden">
@@ -112,9 +113,11 @@ function SongView() {
           selectedMeasure={isPlaying ? null : selectedMeasure}
         />
       </div>
-      <div className="shrink-0">
-        <PianoKeyboard highlightedNotes={highlightedNotes} />
-      </div>
+      {showPiano && (
+        <div className="shrink-0">
+          <PianoKeyboard highlightedNotes={highlightedNotes} />
+        </div>
+      )}
     </main>
   )
 }

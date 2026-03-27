@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react'
-import { Pause, Play } from 'lucide-react'
+import { Gauge, Pause, Piano, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export interface PlayerBarProps {
+  title: string
   isPlaying: boolean
   durationMs: number
   tempoRate: number
   showLabels: boolean
+  showPiano: boolean
   /** Snapshot position in ms — used to sync scrubber when paused/seeking */
   positionMs: number
   onPlay(): void
@@ -15,6 +17,7 @@ export interface PlayerBarProps {
   onSeek(ms: number): void
   onSetTempoRate(rate: number): void
   onToggleLabels(): void
+  onTogglePiano(): void
   getPositionMs(): number
 }
 
@@ -24,10 +27,12 @@ function fmt(ms: number): string {
 }
 
 export function PlayerBar({
+  title,
   isPlaying,
   durationMs,
   tempoRate,
   showLabels,
+  showPiano,
   positionMs,
   onPlay,
   onPause,
@@ -35,6 +40,7 @@ export function PlayerBar({
   onSeek,
   onSetTempoRate,
   onToggleLabels,
+  onTogglePiano,
   getPositionMs,
 }: PlayerBarProps) {
   const scrubberRef = useRef<HTMLInputElement>(null)
@@ -69,66 +75,80 @@ export function PlayerBar({
   }, [isPlaying, getPositionMs, durationMs])
 
   return (
-    <div className="shrink-0 border-b border-gray-200 px-6 py-3 dark:border-zinc-700">
-      <div className="flex items-center gap-3">
-        <Button
-          variant="outline"
-          size="icon"
-          className="shrink-0"
-          onMouseDown={isPlaying ? undefined : onPrepare}
-          onTouchStart={isPlaying ? undefined : onPrepare}
-          onClick={isPlaying ? onPause : onPlay}
-          aria-label={isPlaying ? 'Pause' : 'Play'}
-        >
-          {isPlaying ? <Pause /> : <Play />}
-        </Button>
+    <div className="shrink-0 border-b border-gray-200 px-4 py-2 dark:border-zinc-700">
+      <div className="flex items-center gap-2">
+        {/* Title */}
+        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold">
+          {title}
+        </h1>
 
-        <span
-          ref={timeRef}
-          className="shrink-0 font-mono text-sm text-gray-600 tabular-nums dark:text-zinc-400"
-        >
-          {fmt(0)} / {fmt(durationMs)}
-        </span>
+        <div className="mx-2 h-4 w-px shrink-0 bg-gray-200 dark:bg-zinc-700" />
 
-        <input
-          ref={scrubberRef}
-          type="range"
-          min={0}
-          max={durationMs}
-          step={100}
-          defaultValue={0}
-          className="h-1.5 flex-1 cursor-pointer accent-indigo-500"
-          onMouseDown={() => {
-            isDraggingRef.current = true
-          }}
-          onTouchStart={() => {
-            isDraggingRef.current = true
-          }}
-          onChange={(e) => {
-            // Update time display while dragging without seeking
-            if (timeRef.current) {
-              const pos = Number(e.target.value)
-              timeRef.current.textContent = `${fmt(pos)} / ${fmt(durationMs)}`
-            }
-          }}
-          onMouseUp={(e) => {
-            isDraggingRef.current = false
-            const ms = Number((e.target as HTMLInputElement).value)
-            onSeek(ms)
-            if (timeRef.current)
-              timeRef.current.textContent = `${fmt(ms)} / ${fmt(durationMs)}`
-          }}
-          onTouchEnd={(e) => {
-            isDraggingRef.current = false
-            const ms = Number((e.target as HTMLInputElement).value)
-            onSeek(ms)
-            if (timeRef.current)
-              timeRef.current.textContent = `${fmt(ms)} / ${fmt(durationMs)}`
-          }}
-        />
+        {/* Playback: play/pause, time, scrubber */}
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            onMouseDown={isPlaying ? undefined : onPrepare}
+            onTouchStart={isPlaying ? undefined : onPrepare}
+            onClick={isPlaying ? onPause : onPlay}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? (
+              <Pause className="h-3.5 w-3.5" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <span
+            ref={timeRef}
+            className="shrink-0 font-mono text-xs text-gray-600 tabular-nums dark:text-zinc-400"
+          >
+            {fmt(0)} / {fmt(durationMs)}
+          </span>
+          <input
+            ref={scrubberRef}
+            type="range"
+            min={0}
+            max={durationMs}
+            step={100}
+            defaultValue={0}
+            className="h-1.5 w-24 cursor-pointer accent-indigo-500"
+            onMouseDown={() => {
+              isDraggingRef.current = true
+            }}
+            onTouchStart={() => {
+              isDraggingRef.current = true
+            }}
+            onChange={(e) => {
+              if (timeRef.current) {
+                const pos = Number(e.target.value)
+                timeRef.current.textContent = `${fmt(pos)} / ${fmt(durationMs)}`
+              }
+            }}
+            onMouseUp={(e) => {
+              isDraggingRef.current = false
+              const ms = Number((e.target as HTMLInputElement).value)
+              onSeek(ms)
+              if (timeRef.current)
+                timeRef.current.textContent = `${fmt(ms)} / ${fmt(durationMs)}`
+            }}
+            onTouchEnd={(e) => {
+              isDraggingRef.current = false
+              const ms = Number((e.target as HTMLInputElement).value)
+              onSeek(ms)
+              if (timeRef.current)
+                timeRef.current.textContent = `${fmt(ms)} / ${fmt(durationMs)}`
+            }}
+          />
+        </div>
 
-        <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600 dark:text-zinc-400">
-          <span>Speed</span>
+        <div className="mx-2 h-4 w-px shrink-0 bg-gray-200 dark:bg-zinc-700" />
+
+        {/* Tempo */}
+        <div className="flex shrink-0 items-center gap-1.5 text-xs text-gray-600 dark:text-zinc-400">
+          <Gauge className="h-3.5 w-3.5 shrink-0" />
           <input
             type="range"
             min={25}
@@ -136,21 +156,38 @@ export function PlayerBar({
             step={5}
             value={Math.round(tempoRate * 100)}
             onChange={(e) => onSetTempoRate(Number(e.target.value) / 100)}
-            className="w-24 cursor-pointer accent-indigo-500"
+            className="w-16 cursor-pointer accent-indigo-500"
           />
-          <span className="w-10 tabular-nums">
+          <span className="w-9 tabular-nums">
             {Math.round(tempoRate * 100)}%
           </span>
-        </label>
+        </div>
 
-        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-sm text-gray-600 dark:text-zinc-400">
-          <input
-            type="checkbox"
-            checked={showLabels}
-            onChange={onToggleLabels}
-          />
-          Note names
-        </label>
+        <div className="mx-2 h-4 w-px shrink-0 bg-gray-200 dark:bg-zinc-700" />
+
+        {/* Toggle buttons */}
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className={`h-7 w-7 text-xs font-bold${showLabels ? 'bg-accent' : ''}`}
+            onClick={onToggleLabels}
+            aria-label={showLabels ? 'Hide note names' : 'Show note names'}
+            title="Toggle note names"
+          >
+            A
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className={`h-7 w-7${showPiano ? 'bg-accent' : ''}`}
+            onClick={onTogglePiano}
+            aria-label={showPiano ? 'Hide piano' : 'Show piano'}
+            title="Toggle piano"
+          >
+            <Piano className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   )

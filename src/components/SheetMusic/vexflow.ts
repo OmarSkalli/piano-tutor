@@ -42,13 +42,13 @@ export interface RenderOpts {
   keySignature?: string
 }
 
-const MARGIN_H = 72
-const MARGIN_TOP = 60
+const MARGIN_H = 48
+const MARGIN_TOP = 48
 // Labels sit above treble / below bass (TOP/BOTTOM justify), so they don't
 // compress the inter-stave gap — GRAND_STAFF_GAP stays fixed regardless.
-const GRAND_STAFF_GAP = 56
-const SYSTEM_GAP = 48
-const SYSTEM_GAP_WITH_LABELS = 72
+const GRAND_STAFF_GAP = 44
+const SYSTEM_GAP = 32
+const SYSTEM_GAP_WITH_LABELS = 56
 
 // Standard rest positions for each clef (per engraving convention)
 const REST_KEY = { treble: 'b/4', bass: 'd/3' } as const
@@ -253,7 +253,7 @@ export function renderSheet(
 
   // Greedy row packing: fit as many measures as possible without exceeding usableWidth,
   // with a minimum of 1 and a comfortable padding factor so notes aren't edge-to-edge.
-  const PADDING_FACTOR = 1.4 // multiply min width to give notes breathing room
+  const PADDING_FACTOR = 1.2 // multiply min width to give notes breathing room
   const rows: number[][] = [] // rows[row] = [mi, mi, ...]
   let currentRow: number[] = []
   let currentWidth = 0
